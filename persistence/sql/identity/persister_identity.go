@@ -398,6 +398,23 @@ func (p *IdentityPersister) createIdentityCredentials(ctx context.Context, ident
 			cred.IdentityID = ident.ID
 			cred.NID = nid
 			cred.IdentityCredentialTypeID = ct
+
+			// TOTP and lookup-secret AAL2 logins resolve the credential by
+			// joining identity_credential_identifiers, using the identity ID
+			// as the identifier (see selfservice/strategy/{totp,lookup}/
+			// login.go and settings.go). The admin import path does not
+			// provide an identifier, and at import time the identity ID may
+			// still be the zero value (CockroachDB assigns it via
+			// gen_random_uuid() during the identity insert). At this point
+			// ident.ID is the persisted identity ID, so default the
+			// identifier here to keep AAL2 login working for imported
+			// credentials. See https://github.com/ory/kratos/issues/4561.
+			if len(cred.Identifiers) == 0 &&
+				(cred.Type == identity.CredentialsTypeTOTP ||
+					cred.Type == identity.CredentialsTypeLookup) {
+				cred.Identifiers = []string{ident.ID.String()}
+			}
+
 			credentials = append(credentials, &cred)
 
 			ident.Credentials[k] = cred

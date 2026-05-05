@@ -989,8 +989,16 @@ func TestHandler(t *testing.T) {
 			snapshotx.SnapshotT(t, identity.WithCredentialsAndAdminMetadataInJSON(*actual),
 				snapshotx.ExceptPaths("id", "schema_url", "state_changed_at", "created_at", "updated_at",
 					"credentials.lookup_secret.config.codes", "credentials.lookup_secret.created_at",
-					"credentials.lookup_secret.updated_at", "credentials.password.created_at",
+					"credentials.lookup_secret.updated_at",
+					"credentials.lookup_secret.identifiers",
+					"credentials.password.created_at",
 					"credentials.password.updated_at"))
+
+			// AAL2 lookup-secret login resolves the credential through
+			// identity_credential_identifiers, so the import must persist
+			// exactly one identifier (the identity ID). See
+			// https://github.com/ory/kratos/issues/4561.
+			require.Equal(t, []string{actual.ID.String()}, actual.Credentials[identity.CredentialsTypeLookup].Identifiers)
 		})
 
 		t.Run("case=should update an identity with totp credentials", func(t *testing.T) {
@@ -1043,7 +1051,13 @@ func TestHandler(t *testing.T) {
 			snapshotx.SnapshotT(t, identity.WithCredentialsAndAdminMetadataInJSON(*actual),
 				snapshotx.ExceptPaths("id", "schema_url", "state_changed_at", "created_at", "updated_at",
 					"credentials.totp.created_at", "credentials.totp.updated_at",
+					"credentials.totp.identifiers",
 					"credentials.password.created_at", "credentials.password.updated_at"))
+
+			// AAL2 TOTP login resolves the credential through identity_credential_identifiers,
+			// so the TOTP import must persist exactly one identifier (the identity ID). See
+			// https://github.com/ory/kratos/issues/4561.
+			require.Equal(t, []string{actual.ID.String()}, actual.Credentials[identity.CredentialsTypeTOTP].Identifiers)
 		})
 
 		t.Run("case=should update an identity with passkey credentials", func(t *testing.T) {

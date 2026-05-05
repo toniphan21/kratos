@@ -90,6 +90,95 @@ func createIdentity(t *testing.T, reg driver.Registry) (*identity.Identity, []id
 	return i, codes
 }
 
+// createIdentityWithImportedLookupViaCreate mimics the admin identity import
+// path (`POST /admin/identities` with `credentials.lookup_secret`): it
+// builds an Identity with both password and lookup-secret credentials
+// populated upfront, leaves `Identifiers` empty on the lookup-secret
+// credential exactly like `Handler.importLookupSecretCredentials` does,
+// and persists it via `Manager.Create`. The persister is expected to
+// default the lookup-secret identifier to the persisted identity ID. See
+// https://github.com/ory/kratos/issues/4561.
+func createIdentityWithImportedLookupViaCreate(ctx context.Context, t *testing.T, reg driver.Registry) (*identity.Identity, []identity.RecoveryCode) {
+	codes := make([]identity.RecoveryCode, 4)
+	for k := range codes {
+		codes[k] = identity.RecoveryCode{Code: fmt.Sprintf("imported-key-%d", k)}
+	}
+	identifier := x.NewUUID().String() + "@ory.sh"
+	password := x.NewUUID().String()
+	p, err := reg.Hasher(ctx).Generate(ctx, []byte(password))
+	require.NoError(t, err)
+	rc, err := json.Marshal(&identity.CredentialsLookupConfig{RecoveryCodes: codes})
+	require.NoError(t, err)
+
+	i := &identity.Identity{
+		Traits: identity.Traits(fmt.Sprintf(`{"subject":"%s"}`, identifier)),
+		VerifiableAddresses: []identity.VerifiableAddress{
+			{Value: identifier, Verified: false, CreatedAt: time.Now()},
+		},
+		Credentials: map[identity.CredentialsType]identity.Credentials{
+			identity.CredentialsTypePassword: {
+				Type:        identity.CredentialsTypePassword,
+				Identifiers: []string{identifier},
+				Config:      sqlxx.JSONRawMessage(`{"hashed_password":"` + string(p) + `"}`),
+			},
+			identity.CredentialsTypeLookup: {
+				// Identifiers intentionally empty; the import path does not
+				// know the persisted identity ID yet.
+				Type:   identity.CredentialsTypeLookup,
+				Config: rc,
+			},
+		},
+	}
+	require.NoError(t, i.SetAvailableAAL(ctx, reg.IdentityManager()))
+	require.NoError(t, reg.IdentityManager().Create(ctx, i))
+	return i, codes
+}
+
+// createIdentityWithImportedLookupViaUpdate mimics the admin identity
+// import path on an existing identity (`PUT /admin/identities/{id}` with
+// `credentials.lookup_secret`): it first creates an identity with a
+// password credential, then attaches a lookup-secret credential via
+// `Manager.Update` with `Identifiers` left empty. The persister is
+// expected to default the lookup-secret identifier to the existing
+// identity ID. See https://github.com/ory/kratos/issues/4561.
+func createIdentityWithImportedLookupViaUpdate(ctx context.Context, t *testing.T, reg driver.Registry) (*identity.Identity, []identity.RecoveryCode) {
+	identifier := x.NewUUID().String() + "@ory.sh"
+	password := x.NewUUID().String()
+	p, err := reg.Hasher(ctx).Generate(ctx, []byte(password))
+	require.NoError(t, err)
+
+	i := &identity.Identity{
+		Traits: identity.Traits(fmt.Sprintf(`{"subject":"%s"}`, identifier)),
+		VerifiableAddresses: []identity.VerifiableAddress{
+			{Value: identifier, Verified: false, CreatedAt: time.Now()},
+		},
+		Credentials: map[identity.CredentialsType]identity.Credentials{
+			identity.CredentialsTypePassword: {
+				Type:        identity.CredentialsTypePassword,
+				Identifiers: []string{identifier},
+				Config:      sqlxx.JSONRawMessage(`{"hashed_password":"` + string(p) + `"}`),
+			},
+		},
+	}
+	require.NoError(t, i.SetAvailableAAL(ctx, reg.IdentityManager()))
+	require.NoError(t, reg.IdentityManager().Create(ctx, i))
+
+	codes := make([]identity.RecoveryCode, 4)
+	for k := range codes {
+		codes[k] = identity.RecoveryCode{Code: fmt.Sprintf("imported-key-%d", k)}
+	}
+	rc, err := json.Marshal(&identity.CredentialsLookupConfig{RecoveryCodes: codes})
+	require.NoError(t, err)
+	i.Credentials[identity.CredentialsTypeLookup] = identity.Credentials{
+		// Identifiers intentionally empty; the persister must default it.
+		Type:   identity.CredentialsTypeLookup,
+		Config: rc,
+	}
+	require.NoError(t, i.SetAvailableAAL(ctx, reg.IdentityManager()))
+	require.NoError(t, reg.IdentityManager().Update(ctx, i, identity.ManagerAllowWriteProtectedTraits))
+	return i, codes
+}
+
 func TestCompleteSettings(t *testing.T) {
 	ctx := context.Background()
 	conf, reg := pkg.NewFastRegistryWithMocks(t,

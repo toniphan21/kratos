@@ -267,6 +267,70 @@ func TestCompleteLogin(t *testing.T) {
 		})
 	})
 
+	// Regression coverage for https://github.com/ory/kratos/issues/4561.
+	// Lookup-secret has the same shape of bug as TOTP: the AAL2 login
+	// flow looks the credential up via FindByCredentialsIdentifier keyed
+	// by the identity ID, so the import path must persist a matching
+	// row in identity_credential_identifiers. Both the create and
+	// update entry points are covered.
+	t.Run("case=imported lookup-secret via create identity should succeed at AAL2 login", func(t *testing.T) {
+		id, codes := createIdentityWithImportedLookupViaCreate(t.Context(), t, reg)
+
+		actual, err := reg.PrivilegedIdentityPool().GetIdentityConfidential(t.Context(), id.ID)
+		require.NoError(t, err)
+		assert.Equal(t, []string{actual.ID.String()}, actual.Credentials[identity.CredentialsTypeLookup].Identifiers)
+
+		payload := func(v url.Values) {
+			v.Set(node.LookupCodeEnter, codes[0].Code)
+		}
+
+		startAt := time.Now()
+		check := func(t *testing.T, body string) {
+			assert.True(t, gjson.Get(body, "session.active").Bool(), "%s", body)
+			assert.EqualValues(t, identity.AuthenticatorAssuranceLevel2, gjson.Get(body, "session.authenticator_assurance_level").String())
+			require.Len(t, gjson.Get(body, "session.authentication_methods").Array(), 2, "%s", body)
+			assert.EqualValues(t, identity.CredentialsTypePassword, gjson.Get(body, "session.authentication_methods.0.method").String(), "%s", body)
+			assert.EqualValues(t, identity.CredentialsTypeLookup, gjson.Get(body, "session.authentication_methods.1.method").String(), "%s", body)
+			assert.True(t, gjson.Get(body, "session.authentication_methods.1.completed_at").Time().After(startAt), "%s", body)
+		}
+
+		t.Run("type=api", func(t *testing.T) {
+			apiClient := testhelpers.NewHTTPClientWithIdentitySessionToken(ctx, t, reg, id)
+			body, res := doAPIFlowWithClient(t, payload, id, apiClient, false)
+			assert.Contains(t, res.Request.URL.String(), publicTS.URL+login.RouteSubmitFlow)
+			check(t, body)
+		})
+	})
+
+	t.Run("case=imported lookup-secret via update identity should succeed at AAL2 login", func(t *testing.T) {
+		id, codes := createIdentityWithImportedLookupViaUpdate(t.Context(), t, reg)
+
+		actual, err := reg.PrivilegedIdentityPool().GetIdentityConfidential(t.Context(), id.ID)
+		require.NoError(t, err)
+		assert.Equal(t, []string{actual.ID.String()}, actual.Credentials[identity.CredentialsTypeLookup].Identifiers)
+
+		payload := func(v url.Values) {
+			v.Set(node.LookupCodeEnter, codes[0].Code)
+		}
+
+		startAt := time.Now()
+		check := func(t *testing.T, body string) {
+			assert.True(t, gjson.Get(body, "session.active").Bool(), "%s", body)
+			assert.EqualValues(t, identity.AuthenticatorAssuranceLevel2, gjson.Get(body, "session.authenticator_assurance_level").String())
+			require.Len(t, gjson.Get(body, "session.authentication_methods").Array(), 2, "%s", body)
+			assert.EqualValues(t, identity.CredentialsTypePassword, gjson.Get(body, "session.authentication_methods.0.method").String(), "%s", body)
+			assert.EqualValues(t, identity.CredentialsTypeLookup, gjson.Get(body, "session.authentication_methods.1.method").String(), "%s", body)
+			assert.True(t, gjson.Get(body, "session.authentication_methods.1.completed_at").Time().After(startAt), "%s", body)
+		}
+
+		t.Run("type=api", func(t *testing.T) {
+			apiClient := testhelpers.NewHTTPClientWithIdentitySessionToken(ctx, t, reg, id)
+			body, res := doAPIFlowWithClient(t, payload, id, apiClient, false)
+			assert.Contains(t, res.Request.URL.String(), publicTS.URL+login.RouteSubmitFlow)
+			check(t, body)
+		})
+	})
+
 	t.Run("case=should fail because lookup can not handle AAL1", func(t *testing.T) {
 		apiClient := testhelpers.NewDebugClient(t)
 		f := testhelpers.InitializeLoginFlowViaAPICtx(ctx, t, apiClient, publicTS, false)

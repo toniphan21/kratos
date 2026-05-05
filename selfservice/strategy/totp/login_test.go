@@ -84,6 +84,86 @@ func createIdentity(ctx context.Context, t *testing.T, reg driver.Registry) (*id
 	return i, password, key
 }
 
+// createIdentityWithImportedTOTPViaCreate mimics the admin identity import
+// path (`POST /admin/identities` with `credentials.totp`): it builds an
+// Identity with TOTP and password credentials populated upfront, leaves
+// `Identifiers` empty on the TOTP credential exactly like
+// `Handler.importTOTPCredentials` does, and persists it via
+// `Manager.Create`. The persister is expected to default the TOTP
+// identifier to the persisted identity ID. See
+// https://github.com/ory/kratos/issues/4561.
+func createIdentityWithImportedTOTPViaCreate(ctx context.Context, t *testing.T, reg driver.Registry) (*identity.Identity, *otp.Key) {
+	identifier := x.NewUUID().String() + "@ory.sh"
+	password := x.NewUUID().String()
+	key, err := totp.NewKey(ctx, "foo", reg)
+	require.NoError(t, err)
+	p, err := reg.Hasher(ctx).Generate(ctx, []byte(password))
+	require.NoError(t, err)
+	i := &identity.Identity{
+		Traits: identity.Traits(fmt.Sprintf(`{"subject":"%s"}`, identifier)),
+		VerifiableAddresses: []identity.VerifiableAddress{
+			{Value: identifier, Verified: false, CreatedAt: time.Now()},
+		},
+		Credentials: map[identity.CredentialsType]identity.Credentials{
+			identity.CredentialsTypePassword: {
+				Type:        identity.CredentialsTypePassword,
+				Identifiers: []string{identifier},
+				Config:      sqlxx.JSONRawMessage(`{"hashed_password":"` + string(p) + `"}`),
+			},
+			identity.CredentialsTypeTOTP: {
+				// Identifiers intentionally empty; the import path does not
+				// know the persisted identity ID yet.
+				Type:   identity.CredentialsTypeTOTP,
+				Config: sqlxx.JSONRawMessage(`{"totp_url":"` + string(key.URL()) + `"}`),
+			},
+		},
+	}
+	require.NoError(t, i.SetAvailableAAL(ctx, reg.IdentityManager()))
+	require.NoError(t, reg.IdentityManager().Create(ctx, i))
+	return i, key
+}
+
+// createIdentityWithImportedTOTPViaUpdate mimics the admin identity import
+// path on an existing identity (`PUT /admin/identities/{id}` with
+// `credentials.totp`): it first creates an identity with a password
+// credential, then attaches a TOTP credential via `Manager.Update` with
+// `Identifiers` left empty. The persister is expected to default the TOTP
+// identifier to the existing identity ID. See
+// https://github.com/ory/kratos/issues/4561.
+func createIdentityWithImportedTOTPViaUpdate(ctx context.Context, t *testing.T, reg driver.Registry) (*identity.Identity, *otp.Key) {
+	identifier := x.NewUUID().String() + "@ory.sh"
+	password := x.NewUUID().String()
+	p, err := reg.Hasher(ctx).Generate(ctx, []byte(password))
+	require.NoError(t, err)
+	i := &identity.Identity{
+		Traits: identity.Traits(fmt.Sprintf(`{"subject":"%s"}`, identifier)),
+		VerifiableAddresses: []identity.VerifiableAddress{
+			{Value: identifier, Verified: false, CreatedAt: time.Now()},
+		},
+		Credentials: map[identity.CredentialsType]identity.Credentials{
+			identity.CredentialsTypePassword: {
+				Type:        identity.CredentialsTypePassword,
+				Identifiers: []string{identifier},
+				Config:      sqlxx.JSONRawMessage(`{"hashed_password":"` + string(p) + `"}`),
+			},
+		},
+	}
+	require.NoError(t, i.SetAvailableAAL(ctx, reg.IdentityManager()))
+	require.NoError(t, reg.IdentityManager().Create(ctx, i))
+
+	key, err := totp.NewKey(ctx, "foo", reg)
+	require.NoError(t, err)
+	// Import a TOTP credential via update with no identifier set; the
+	// persister must default it to the (already persisted) identity ID.
+	i.Credentials[identity.CredentialsTypeTOTP] = identity.Credentials{
+		Type:   identity.CredentialsTypeTOTP,
+		Config: sqlxx.JSONRawMessage(`{"totp_url":"` + string(key.URL()) + `"}`),
+	}
+	require.NoError(t, i.SetAvailableAAL(ctx, reg.IdentityManager()))
+	require.NoError(t, reg.IdentityManager().Update(ctx, i, identity.ManagerAllowWriteProtectedTraits))
+	return i, key
+}
+
 func TestCompleteLogin(t *testing.T) {
 	t.Parallel()
 
@@ -361,6 +441,79 @@ func TestCompleteLogin(t *testing.T) {
 			check(t, false, body, res)
 			assert.EqualValues(t, flow.ContinueWithActionRedirectBrowserToString, gjson.Get(body, "continue_with.0.action").String(), "%s", body)
 			assert.EqualValues(t, returnTo, gjson.Get(body, "continue_with.0.redirect_browser_to").String(), "%s", body)
+		})
+	})
+
+	// Regression coverage for https://github.com/ory/kratos/issues/4561.
+	// When a TOTP credential is imported through the admin identity API,
+	// AAL2 login must be able to resolve it via FindByCredentialsIdentifier,
+	// which means an identity_credential_identifiers row keyed by the
+	// identity ID has to be persisted. Both the create and update entry
+	// points are covered here.
+	t.Run("case=imported TOTP via create identity should succeed at AAL2 login", func(t *testing.T) {
+		id, key := createIdentityWithImportedTOTPViaCreate(t.Context(), t, reg)
+
+		// The persister must have defaulted the TOTP identifier to the
+		// identity ID, otherwise the login lookup below would fail with
+		// "You have no TOTP device set up.".
+		actual, err := reg.PrivilegedIdentityPool().GetIdentityConfidential(t.Context(), id.ID)
+		require.NoError(t, err)
+		assert.Equal(t, []string{actual.ID.String()}, actual.Credentials[identity.CredentialsTypeTOTP].Identifiers)
+
+		code, err := stdtotp.GenerateCode(key.Secret(), time.Now())
+		require.NoError(t, err)
+		payload := func(v url.Values) {
+			v.Set("totp_code", code)
+		}
+
+		startAt := time.Now()
+		check := func(t *testing.T, body string) {
+			assert.True(t, gjson.Get(body, "session.active").Bool(), "%s", body)
+			assert.EqualValues(t, identity.AuthenticatorAssuranceLevel2, gjson.Get(body, "session.authenticator_assurance_level").String())
+			// The seeded session records password at AAL1; submitting the
+			// TOTP code adds a second authentication method.
+			require.Len(t, gjson.Get(body, "session.authentication_methods").Array(), 2, "%s", body)
+			assert.EqualValues(t, identity.CredentialsTypePassword, gjson.Get(body, "session.authentication_methods.0.method").String(), "%s", body)
+			assert.EqualValues(t, identity.CredentialsTypeTOTP, gjson.Get(body, "session.authentication_methods.1.method").String(), "%s", body)
+			assert.True(t, gjson.Get(body, "session.authentication_methods.1.completed_at").Time().After(startAt), "%s", body)
+		}
+
+		t.Run("type=api", func(t *testing.T) {
+			body, res := doAPIFlow(t, payload, id)
+			assert.Contains(t, res.Request.URL.String(), publicTS.URL+login.RouteSubmitFlow)
+			check(t, body)
+		})
+	})
+
+	t.Run("case=imported TOTP via update identity should succeed at AAL2 login", func(t *testing.T) {
+		id, key := createIdentityWithImportedTOTPViaUpdate(t.Context(), t, reg)
+
+		actual, err := reg.PrivilegedIdentityPool().GetIdentityConfidential(t.Context(), id.ID)
+		require.NoError(t, err)
+		assert.Equal(t, []string{actual.ID.String()}, actual.Credentials[identity.CredentialsTypeTOTP].Identifiers)
+
+		code, err := stdtotp.GenerateCode(key.Secret(), time.Now())
+		require.NoError(t, err)
+		payload := func(v url.Values) {
+			v.Set("totp_code", code)
+		}
+
+		startAt := time.Now()
+		check := func(t *testing.T, body string) {
+			assert.True(t, gjson.Get(body, "session.active").Bool(), "%s", body)
+			assert.EqualValues(t, identity.AuthenticatorAssuranceLevel2, gjson.Get(body, "session.authenticator_assurance_level").String())
+			// The seeded session records password at AAL1; submitting the
+			// TOTP code adds a second authentication method.
+			require.Len(t, gjson.Get(body, "session.authentication_methods").Array(), 2, "%s", body)
+			assert.EqualValues(t, identity.CredentialsTypePassword, gjson.Get(body, "session.authentication_methods.0.method").String(), "%s", body)
+			assert.EqualValues(t, identity.CredentialsTypeTOTP, gjson.Get(body, "session.authentication_methods.1.method").String(), "%s", body)
+			assert.True(t, gjson.Get(body, "session.authentication_methods.1.completed_at").Time().After(startAt), "%s", body)
+		}
+
+		t.Run("type=api", func(t *testing.T) {
+			body, res := doAPIFlow(t, payload, id)
+			assert.Contains(t, res.Request.URL.String(), publicTS.URL+login.RouteSubmitFlow)
+			check(t, body)
 		})
 	})
 

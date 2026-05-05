@@ -7,12 +7,14 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 
 	"github.com/gofrs/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ory/herodot"
 	"github.com/ory/x/snapshotx"
 )
 
@@ -577,6 +579,48 @@ func TestImportPasskeyCredentials(t *testing.T) {
 			snapshotx.SnapshotT(t, i.Credentials)
 		})
 	}
+
+	// Negative cases — input that would store a non-functional credential
+	// must be rejected up front. See
+	// https://github.com/ory/kratos/issues/4561.
+	//
+	// herodot wraps the user-facing detail in Reason; err.Error() returns
+	// the canonical status message ("The request was malformed or
+	// contained invalid parameters"), so unwrap to a *herodot.DefaultError
+	// and assert against Reason() instead.
+	requireBadRequestReason := func(t *testing.T, err error, mustContain string) {
+		t.Helper()
+		require.Error(t, err)
+		var herr *herodot.DefaultError
+		require.True(t, errors.As(err, &herr), "expected a *herodot.DefaultError, got %T: %v", err, err)
+		assert.Equal(t, herodot.ErrBadRequest().StatusCode(), herr.StatusCode())
+		assert.Contains(t, herr.Reason(), mustContain)
+	}
+
+	t.Run("case=rejects import without user_handle on a new credential", func(t *testing.T) {
+		i := &Identity{}
+		err := h.importPasskeyCredentials(ctx, i, CredentialsWebAuthn{cred1}, nil)
+		requireBadRequestReason(t, err, "user_handle")
+		_, ok := i.GetCredentials(CredentialsTypePasskey)
+		assert.False(t, ok, "no passkey credential should be persisted on the identity")
+	})
+
+	t.Run("case=rejects import without user_handle when previous credential also lacks one", func(t *testing.T) {
+		i := &Identity{}
+		require.NoError(t, i.SetCredentialsWithConfig(
+			CredentialsTypePasskey,
+			Credentials{},
+			CredentialsWebAuthnConfig{Credentials: CredentialsWebAuthn{cred1}},
+		))
+		err := h.importPasskeyCredentials(ctx, i, CredentialsWebAuthn{cred2}, nil)
+		requireBadRequestReason(t, err, "user_handle")
+	})
+
+	t.Run("case=rejects import without any credentials", func(t *testing.T) {
+		i := &Identity{}
+		err := h.importPasskeyCredentials(ctx, i, CredentialsWebAuthn{}, []byte("user1"))
+		requireBadRequestReason(t, err, "credentials")
+	})
 }
 
 func TestImportWebAuthnCredentials(t *testing.T) {
@@ -739,6 +783,11 @@ func TestImportTOTPCredentials(t *testing.T) {
 				require.NoError(t, json.Unmarshal(creds.Config, &config))
 
 				assert.Equal(t, "otpauth://totp/Example:alice@example.com?secret=JBSWY3DPEHPK3PXP&issuer=Example", config.TOTPURL)
+				// The importer leaves Identifiers empty because the identity ID
+				// is not yet known. The persister defaults it to the persisted
+				// identity ID at credential-create time. See
+				// https://github.com/ory/kratos/issues/4561.
+				assert.Empty(t, creds.Identifiers)
 			},
 		},
 		{
