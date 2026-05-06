@@ -61,7 +61,7 @@ require (
 	github.com/ory/jsonschema/v3 v3.0.9-0.20250317235931-280c5fc7bf0e
 	github.com/ory/mail/v3 v3.0.1-0.20260413103059-df54acc74133
 	github.com/ory/nosurf v1.2.7
-	github.com/ory/pop/v6 v6.4.2-0.20260330100515-0277b33f8355
+	github.com/ory/pop/v6 v6.4.2-0.20260506111808-5dbeab0cb08b
 	github.com/peterhellberg/link v1.2.0
 	github.com/phayes/freeport v0.0.0-20220201140144-74d24b5ae9f5
 	github.com/pkg/errors v0.9.1
@@ -144,7 +144,6 @@ require (
 	github.com/jinzhu/copier v0.4.0 // indirect
 	github.com/kr/pretty v0.3.1 // indirect
 	github.com/kr/text v0.2.0 // indirect
-	github.com/kylelemons/godebug v1.1.0 // indirect
 	github.com/mailhog/MailHog v1.0.1 // indirect
 	github.com/mailhog/MailHog-UI v1.0.1 // indirect
 	github.com/mailhog/http v1.0.1 // indirect
