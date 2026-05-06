@@ -252,49 +252,49 @@ func (e *WebHook) ExecutePostRegistrationPostPersistHook(_ http.ResponseWriter, 
 	})
 }
 
-func (e *WebHook) ExecuteSettingsPreHook(_ http.ResponseWriter, req *http.Request, flow *settings.Flow, s *session.Session) error {
+func (e *WebHook) ExecuteSettingsPreHook(_ http.ResponseWriter, req *http.Request, params settings.PreHookExecutorParams) error {
 	return otelx.WithSpan(req.Context(), "selfservice.hook.WebHook.ExecuteSettingsPreHook", func(ctx context.Context) error {
 		return e.execute(ctx, &templateContext{
-			Flow:           flow,
+			Flow:           params.Flow,
 			RequestHeaders: req.Header,
 			RequestMethod:  req.Method,
 			RequestURL:     x.RequestURL(req).String(),
 			RequestCookies: cookies(req),
-			Session:        s,
+			Session:        params.Session,
 		})
 	})
 }
 
-func (e *WebHook) ExecuteSettingsPostPersistHook(_ http.ResponseWriter, req *http.Request, flow *settings.Flow, id *identity.Identity, s *session.Session) error {
+func (e *WebHook) ExecuteSettingsPostPersistHook(_ http.ResponseWriter, req *http.Request, params settings.PostHookPostPersistExecutorParams) error {
 	if e.conf.CanInterrupt || e.conf.Response.Parse {
 		return nil
 	}
 	return otelx.WithSpan(req.Context(), "selfservice.hook.WebHook.ExecuteSettingsPostPersistHook", func(ctx context.Context) error {
 		return e.execute(ctx, &templateContext{
-			Flow:           flow,
+			Flow:           params.Flow,
 			RequestHeaders: req.Header,
 			RequestMethod:  req.Method,
 			RequestURL:     x.RequestURL(req).String(),
 			RequestCookies: cookies(req),
-			Identity:       id,
-			Session:        s,
+			Identity:       params.Updated,
+			Session:        params.Session,
 		})
 	})
 }
 
-func (e *WebHook) ExecuteSettingsPrePersistHook(_ http.ResponseWriter, req *http.Request, flow *settings.Flow, id *identity.Identity, s *session.Session) error {
+func (e *WebHook) ExecuteSettingsPrePersistHook(_ http.ResponseWriter, req *http.Request, params settings.PostHookPrePersistExecutorParams) error {
 	if !e.conf.CanInterrupt && !e.conf.Response.Parse {
 		return nil
 	}
 	return otelx.WithSpan(req.Context(), "selfservice.hook.WebHook.ExecuteSettingsPrePersistHook", func(ctx context.Context) error {
 		return e.execute(ctx, &templateContext{
-			Flow:           flow,
+			Flow:           params.Flow,
 			RequestHeaders: req.Header,
 			RequestMethod:  req.Method,
 			RequestURL:     x.RequestURL(req).String(),
 			RequestCookies: cookies(req),
-			Identity:       id,
-			Session:        s,
+			Identity:       params.Identity,
+			Session:        params.Session,
 		})
 	})
 }

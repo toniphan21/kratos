@@ -4,11 +4,12 @@
 package hook
 
 const (
-	KeySessionIssuer          = "session"
-	KeySessionDestroyer       = "revoke_active_sessions"
-	KeyWebHook                = "web_hook"
-	KeyRequireVerifiedAddress = "require_verified_address"
-	KeyVerificationUI         = "show_verification_ui"
-	KeyVerifier               = "verification"
-	KeyVerifyNewAddress       = "verify_new_address"
+	KeySessionIssuer           = "session"
+	KeySessionDestroyer        = "revoke_active_sessions"
+	KeyWebHook                 = "web_hook"
+	KeyRequireVerifiedAddress  = "require_verified_address"
+	KeyVerificationUI          = "show_verification_ui"
+	KeyVerifier                = "verification"
+	KeyVerifyNewAddress        = "verify_new_address"
+	KeyNotifyPreviousAddresses = "notify_previous_addresses"
 )

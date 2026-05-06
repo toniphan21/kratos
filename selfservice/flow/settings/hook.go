@@ -44,20 +44,35 @@ import (
 )
 
 type (
+	PreHookExecutorParams struct {
+		Flow    *Flow
+		Session *session.Session
+	}
 	PreHookExecutor interface {
-		ExecuteSettingsPreHook(w http.ResponseWriter, r *http.Request, a *Flow, s *session.Session) error
+		ExecuteSettingsPreHook(w http.ResponseWriter, r *http.Request, params PreHookExecutorParams) error
 	}
-	PreHookExecutorFunc func(w http.ResponseWriter, r *http.Request, a *Flow, s *session.Session) error
+	PreHookExecutorFunc func(w http.ResponseWriter, r *http.Request, params PreHookExecutorParams) error
 
+	PostHookPrePersistExecutorParams struct {
+		Flow     *Flow
+		Identity *identity.Identity
+		Session  *session.Session
+	}
 	PostHookPrePersistExecutor interface {
-		ExecuteSettingsPrePersistHook(w http.ResponseWriter, r *http.Request, a *Flow, i *identity.Identity, s *session.Session) error
+		ExecuteSettingsPrePersistHook(w http.ResponseWriter, r *http.Request, params PostHookPrePersistExecutorParams) error
 	}
-	PostHookPrePersistExecutorFunc func(w http.ResponseWriter, r *http.Request, a *Flow, i *identity.Identity, s *session.Session) error
+	PostHookPrePersistExecutorFunc func(w http.ResponseWriter, r *http.Request, params PostHookPrePersistExecutorParams) error
 
-	PostHookPostPersistExecutor interface {
-		ExecuteSettingsPostPersistHook(w http.ResponseWriter, r *http.Request, a *Flow, id *identity.Identity, s *session.Session) error
+	PostHookPostPersistExecutorParams struct {
+		Flow     *Flow
+		Previous *identity.Identity
+		Updated  *identity.Identity
+		Session  *session.Session
 	}
-	PostHookPostPersistExecutorFunc func(w http.ResponseWriter, r *http.Request, a *Flow, id *identity.Identity, s *session.Session) error
+	PostHookPostPersistExecutor interface {
+		ExecuteSettingsPostPersistHook(w http.ResponseWriter, r *http.Request, params PostHookPostPersistExecutorParams) error
+	}
+	PostHookPostPersistExecutorFunc func(w http.ResponseWriter, r *http.Request, params PostHookPostPersistExecutorParams) error
 
 	HooksProvider interface {
 		PreSettingsHooks(ctx context.Context) ([]PreHookExecutor, error)
@@ -93,16 +108,16 @@ type (
 	}
 )
 
-func (f PreHookExecutorFunc) ExecuteSettingsPreHook(w http.ResponseWriter, r *http.Request, a *Flow, s *session.Session) error {
-	return f(w, r, a, s)
+func (f PreHookExecutorFunc) ExecuteSettingsPreHook(w http.ResponseWriter, r *http.Request, params PreHookExecutorParams) error {
+	return f(w, r, params)
 }
 
-func (f PostHookPrePersistExecutorFunc) ExecuteSettingsPrePersistHook(w http.ResponseWriter, r *http.Request, a *Flow, i *identity.Identity, s *session.Session) error {
-	return f(w, r, a, i, s)
+func (f PostHookPrePersistExecutorFunc) ExecuteSettingsPrePersistHook(w http.ResponseWriter, r *http.Request, params PostHookPrePersistExecutorParams) error {
+	return f(w, r, params)
 }
 
-func (f PostHookPostPersistExecutorFunc) ExecuteSettingsPostPersistHook(w http.ResponseWriter, r *http.Request, a *Flow, id *identity.Identity, s *session.Session) error {
-	return f(w, r, a, id, s)
+func (f PostHookPostPersistExecutorFunc) ExecuteSettingsPostPersistHook(w http.ResponseWriter, r *http.Request, params PostHookPostPersistExecutorParams) error {
+	return f(w, r, params)
 }
 
 func PostHookPostPersistExecutorNames(e []PostHookPostPersistExecutor) []string {
@@ -210,7 +225,11 @@ func (e *HookExecutor) PostSettingsHook(ctx context.Context, w http.ResponseWrit
 			"flow_method":       settingsType,
 		}
 
-		if err := executor.ExecuteSettingsPrePersistHook(w, r, ctxUpdate.Flow, i, ctxUpdate.Session); err != nil {
+		if err := executor.ExecuteSettingsPrePersistHook(w, r, PostHookPrePersistExecutorParams{
+			Flow:     ctxUpdate.Flow,
+			Identity: i,
+			Session:  ctxUpdate.Session,
+		}); err != nil {
 			if errors.Is(err, ErrHookAbortFlow) {
 				e.d.Logger().WithRequest(r).WithFields(logFields).
 					Debug("A ExecuteSettingsPrePersistHook hook aborted early.")
@@ -274,8 +293,14 @@ func (e *HookExecutor) PostSettingsHook(ctx context.Context, w http.ResponseWrit
 	if err != nil {
 		return err
 	}
+	previous := ctxUpdate.GetSessionIdentity()
 	for k, executor := range postHooks {
-		if err := executor.ExecuteSettingsPostPersistHook(w, r, ctxUpdate.Flow, i, ctxUpdate.Session); err != nil {
+		if err := executor.ExecuteSettingsPostPersistHook(w, r, PostHookPostPersistExecutorParams{
+			Flow:     ctxUpdate.Flow,
+			Previous: previous,
+			Updated:  i,
+			Session:  ctxUpdate.Session,
+		}); err != nil {
 			if errors.Is(err, ErrHookAbortFlow) {
 				e.d.Logger().
 					WithRequest(r).
@@ -387,7 +412,13 @@ func (e *HookExecutor) ApplyPendingTraitsChange(
 		return nil, errors.WithStack(ErrPendingTraitsChangeSessionInvalid)
 	}
 
-	var sess *session.Session
+	var (
+		sess *session.Session
+		// Capture the pre-change identity before sess.Identity is overwritten
+		// below so post-persist hooks (notify_previous_addresses) can compute
+		// diffs without re-reading the row.
+		previous *identity.Identity
+	)
 	err = e.d.TransactionalPersisterProvider().Transaction(ctx, func(ctx context.Context, _ *pop.Connection) error {
 		// ExpandDefault loads the session's identity in the same query,
 		// so IsActive() below checks the identity's active state and we
@@ -407,6 +438,7 @@ func (e *HookExecutor) ApplyPendingTraitsChange(
 		if s.Identity == nil || s.Identity.ID != ptc.IdentityID {
 			return errors.WithStack(ErrPendingTraitsChangeSessionInvalid)
 		}
+		previous = s.Identity
 		sess = s
 
 		if identity.HashTraits(json.RawMessage(s.Identity.Traits)) != ptc.OriginalTraitsHash {
@@ -481,7 +513,12 @@ func (e *HookExecutor) ApplyPendingTraitsChange(
 			"identity_id":       i.ID,
 			"flow_method":       settingsTypePendingTraitsChange,
 		}
-		if err := executor.ExecuteSettingsPostPersistHook(w, r, originFlow, i, sess); err != nil {
+		if err := executor.ExecuteSettingsPostPersistHook(w, r, PostHookPostPersistExecutorParams{
+			Flow:     originFlow,
+			Previous: previous,
+			Updated:  i,
+			Session:  sess,
+		}); err != nil {
 			if errors.Is(err, ErrHookAbortFlow) {
 				e.d.Logger().WithRequest(r).WithFields(logFields).
 					Debug("A post-persist hook aborted the pending-traits-change continuation flow.")
@@ -505,7 +542,10 @@ func (e *HookExecutor) PreSettingsHook(ctx context.Context, w http.ResponseWrite
 		return err
 	}
 	for _, executor := range hooks {
-		if err := executor.ExecuteSettingsPreHook(w, r, a, s); err != nil {
+		if err := executor.ExecuteSettingsPreHook(w, r, PreHookExecutorParams{
+			Flow:    a,
+			Session: s,
+		}); err != nil {
 			return err
 		}
 	}

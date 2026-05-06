@@ -291,7 +291,12 @@ func TestWebHooks(t *testing.T) {
 			uc:         "Post Settings Hook",
 			createFlow: func() flow.Flow { return &settings.Flow{ID: x.NewUUID(), TransientPayload: transientPayload} },
 			callWebHook: func(wh *hook.WebHook, req *http.Request, f flow.Flow, s *session.Session) error {
-				return wh.ExecuteSettingsPostPersistHook(nil, req, f.(*settings.Flow), s.Identity, s)
+				return wh.ExecuteSettingsPostPersistHook(nil, req, settings.PostHookPostPersistExecutorParams{
+					Flow:     f.(*settings.Flow),
+					Updated:  s.Identity,
+					Previous: s.Identity,
+					Session:  s,
+				})
 			},
 			expectedBody: func(req *http.Request, f flow.Flow, s *session.Session) string {
 				return bodyWithFlowAndIdentityAndSessionAndTransientPayload(req, f, s, transientPayload)
@@ -606,7 +611,12 @@ func TestWebHooks(t *testing.T) {
 			uc:         "Post Settings Hook - no block",
 			createFlow: func() flow.Flow { return &settings.Flow{ID: x.NewUUID()} },
 			callWebHook: func(wh *hook.WebHook, req *http.Request, f flow.Flow, s *session.Session) error {
-				return wh.ExecuteSettingsPostPersistHook(nil, req, f.(*settings.Flow), s.Identity, s)
+				return wh.ExecuteSettingsPostPersistHook(nil, req, settings.PostHookPostPersistExecutorParams{
+					Flow:     f.(*settings.Flow),
+					Updated:  s.Identity,
+					Previous: s.Identity,
+					Session:  s,
+				})
 			},
 			webHookResponse: func() (int, []byte) {
 				return http.StatusOK, []byte{}
@@ -617,7 +627,11 @@ func TestWebHooks(t *testing.T) {
 			uc:         "Post Settings Hook Pre Persist - block",
 			createFlow: func() flow.Flow { return &settings.Flow{ID: x.NewUUID()} },
 			callWebHook: func(wh *hook.WebHook, req *http.Request, f flow.Flow, s *session.Session) error {
-				return wh.ExecuteSettingsPrePersistHook(nil, req, f.(*settings.Flow), s.Identity, s)
+				return wh.ExecuteSettingsPrePersistHook(nil, req, settings.PostHookPrePersistExecutorParams{
+					Flow:     f.(*settings.Flow),
+					Identity: s.Identity,
+					Session:  s,
+				})
 			},
 			webHookResponse: func() (int, []byte) {
 				return http.StatusBadRequest, webHookResponse
@@ -628,7 +642,12 @@ func TestWebHooks(t *testing.T) {
 			uc:         "Post Settings Hook Post Persist - block has no effect",
 			createFlow: func() flow.Flow { return &settings.Flow{ID: x.NewUUID()} },
 			callWebHook: func(wh *hook.WebHook, req *http.Request, f flow.Flow, s *session.Session) error {
-				return wh.ExecuteSettingsPostPersistHook(nil, req, f.(*settings.Flow), s.Identity, s)
+				return wh.ExecuteSettingsPostPersistHook(nil, req, settings.PostHookPostPersistExecutorParams{
+					Flow:     f.(*settings.Flow),
+					Updated:  s.Identity,
+					Previous: s.Identity,
+					Session:  s,
+				})
 			},
 			webHookResponse: func() (int, []byte) {
 				return http.StatusBadRequest, webHookResponse
@@ -850,11 +869,20 @@ func TestWebHooks(t *testing.T) {
 			in := &identity.Identity{ID: uuid}
 			s := &session.Session{ID: x.NewUUID(), Identity: in}
 
-			postPersistErr := wh.ExecuteSettingsPostPersistHook(nil, req, f, in, s)
+			postPersistErr := wh.ExecuteSettingsPostPersistHook(nil, req, settings.PostHookPostPersistExecutorParams{
+				Flow:     f,
+				Updated:  in,
+				Previous: in,
+				Session:  s,
+			})
 			assert.NoError(t, postPersistErr)
 			assert.Equal(t, in, &identity.Identity{ID: uuid})
 
-			prePersistErr := wh.ExecuteSettingsPrePersistHook(nil, req, f, in, s)
+			prePersistErr := wh.ExecuteSettingsPrePersistHook(nil, req, settings.PostHookPrePersistExecutorParams{
+				Flow:     f,
+				Identity: in,
+				Session:  s,
+			})
 			assert.NoError(t, prePersistErr)
 			if tc.parse == true {
 				assert.Equal(t, in, &identity.Identity{ID: uuid, Traits: identity.Traits(`{"email":"some@other-example.org"}`)})

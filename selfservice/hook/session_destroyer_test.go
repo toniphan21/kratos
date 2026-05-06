@@ -22,6 +22,7 @@ import (
 	"github.com/ory/kratos/driver/config"
 	"github.com/ory/kratos/identity"
 	"github.com/ory/kratos/pkg"
+	"github.com/ory/kratos/selfservice/flow/settings"
 	"github.com/ory/kratos/selfservice/hook"
 	"github.com/ory/kratos/session"
 )
@@ -72,9 +73,12 @@ func TestSessionDestroyer(t *testing.T) {
 				return h.ExecuteSettingsPostPersistHook(
 					httptest.NewRecorder(),
 					new(http.Request),
-					nil,
-					i,
-					&session.Session{Identity: i},
+					settings.PostHookPostPersistExecutorParams{
+						Flow:     nil,
+						Previous: i,
+						Updated:  i,
+						Session:  &session.Session{Identity: i},
+					},
 				)
 			},
 		},

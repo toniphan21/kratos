@@ -203,7 +203,12 @@ func TestVerifier(t *testing.T) {
 
 		h := hook.NewVerifier(reg)
 		require.NoError(t, h.ExecuteSettingsPostPersistHook(
-			httptest.NewRecorder(), u, originalFlow, i, &session.Session{ID: x.NewUUID(), Identity: i}))
+			httptest.NewRecorder(), u, settings.PostHookPostPersistExecutorParams{
+				Flow:     originalFlow,
+				Updated:  i,
+				Previous: i,
+				Session:  &session.Session{ID: x.NewUUID(), Identity: i},
+			}))
 		assert.Lenf(t, originalFlow.ContinueWith(), 2, "%#ßv", originalFlow.ContinueWith())
 		assertContinueWithAddresses(t, originalFlow.ContinueWith(), []string{"foo@ory.sh", "bar@ory.sh"})
 		vf := originalFlow.ContinueWith()[0]
@@ -239,7 +244,12 @@ func TestVerifier(t *testing.T) {
 		originalFlow = &settings.Flow{RequestURL: "http://foo.com/settings?after_verification_return_to=verification_callback"}
 
 		require.NoError(t, h.ExecuteSettingsPostPersistHook(
-			httptest.NewRecorder(), u, originalFlow, i, &session.Session{ID: x.NewUUID(), Identity: i}))
+			httptest.NewRecorder(), u, settings.PostHookPostPersistExecutorParams{
+				Flow:     originalFlow,
+				Updated:  i,
+				Previous: i,
+				Session:  &session.Session{ID: x.NewUUID(), Identity: i},
+			}))
 
 		assert.Emptyf(t, originalFlow.ContinueWith(), "%+v", originalFlow.ContinueWith())
 

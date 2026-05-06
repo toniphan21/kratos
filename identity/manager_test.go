@@ -24,6 +24,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ory/kratos/courier"
 	"github.com/ory/kratos/driver/config"
 	"github.com/ory/kratos/identity"
 	"github.com/ory/kratos/pkg"
@@ -848,5 +849,76 @@ func TestManagerNoDefaultNamedSchema(t *testing.T) {
 			StateChangedAt: &stateChangedAt,
 		}
 		require.NoError(t, reg.IdentityManager().Create(t.Context(), original))
+	})
+}
+
+func TestManager_SendVerifiableAddressChangedNotifications(t *testing.T) {
+	_, reg := pkg.NewFastRegistryWithMocks(t,
+		configx.WithValues(map[string]interface{}{
+			config.ViperKeyCourierSMTPURL:          "smtp://foo@bar@dev.null/",
+			config.ViperKeyDefaultIdentitySchemaID: "default",
+		}),
+		configx.WithValues(testhelpers.IdentitySchemasConfig(map[string]string{
+			"default": "file://./stub/manager.schema.json",
+		})),
+	)
+
+	t.Run("case=queues email and sms for supported targets", func(t *testing.T) {
+		ctx := t.Context()
+		i := identity.NewIdentity("default")
+		i.Traits = identity.Traits(`{"email":"new@example.com"}`)
+		require.NoError(t, reg.IdentityManager().Create(ctx, i))
+
+		targets := []identity.AddressRef{
+			{Value: "old@example.com", Via: identity.AddressTypeEmail},
+			{Value: "+15551234567", Via: identity.AddressTypeSMS},
+		}
+
+		require.NoError(t, reg.IdentityManager().SendVerifiableAddressChangedNotifications(ctx, targets, i))
+
+		messages, err := reg.CourierPersister().NextMessages(ctx, 10)
+		require.NoError(t, err)
+		require.Len(t, messages, 2)
+
+		var gotEmail, gotSMS bool
+		for _, m := range messages {
+			switch m.Type {
+			case courier.MessageTypeEmail:
+				assert.Equal(t, "old@example.com", m.Recipient)
+				gotEmail = true
+			case courier.MessageTypeSMS:
+				assert.Equal(t, "+15551234567", m.Recipient)
+				gotSMS = true
+			}
+		}
+		assert.True(t, gotEmail, "expected an email message")
+		assert.True(t, gotSMS, "expected an SMS message")
+	})
+
+	t.Run("case=unsupported Via skipped", func(t *testing.T) {
+		ctx := t.Context()
+		i := identity.NewIdentity("default")
+		i.Traits = identity.Traits(`{"email":"skip@example.com"}`)
+		require.NoError(t, reg.IdentityManager().Create(ctx, i))
+
+		require.NoError(t, reg.IdentityManager().SendVerifiableAddressChangedNotifications(ctx, []identity.AddressRef{
+			{Value: "fax:+123", Via: "fax"},
+		}, i))
+
+		messages, err := reg.CourierPersister().NextMessages(ctx, 10)
+		if err == nil {
+			for _, m := range messages {
+				assert.NotEqual(t, "fax:+123", m.Recipient, "fax target must not be queued")
+			}
+		}
+	})
+
+	t.Run("case=empty targets is noop", func(t *testing.T) {
+		ctx := t.Context()
+		i := identity.NewIdentity("default")
+		i.Traits = identity.Traits(`{"email":"noop@example.com"}`)
+		require.NoError(t, reg.IdentityManager().Create(ctx, i))
+
+		require.NoError(t, reg.IdentityManager().SendVerifiableAddressChangedNotifications(ctx, nil, i))
 	})
 }

@@ -121,6 +121,28 @@
       "additionalProperties": false,
       "required": ["hook"]
     },
+    "selfServiceNotifyPreviousAddressesHook": {
+      "type": "object",
+      "properties": {
+        "hook": {
+          "const": "notify_previous_addresses"
+        },
+        "config": {
+          "type": "object",
+          "properties": {
+            "recipients": {
+              "type": "string",
+              "enum": ["removed", "all_verified", "all"],
+              "default": "removed",
+              "description": "Which previous addresses receive the change notification. 'removed' (default): only addresses that no longer exist after the change. 'all_verified': all addresses that were verified before the change. 'all': all addresses on the identity before the change."
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false,
+      "required": ["hook"]
+    },
     "webHookAuthBasicAuthProperties": {
       "properties": {
         "type": {
@@ -787,6 +809,9 @@
               },
               {
                 "$ref": "#/definitions/selfServiceVerifyNewAddressHook"
+              },
+              {
+                "$ref": "#/definitions/selfServiceNotifyPreviousAddressesHook"
               }
             ]
           },
@@ -2154,6 +2179,18 @@
                     }
                   },
                   "required": ["email"]
+                }
+              }
+            },
+            "verifiable_address_changed": {
+              "additionalProperties": false,
+              "type": "object",
+              "properties": {
+                "email": {
+                  "$ref": "#/definitions/emailCourierTemplate"
+                },
+                "sms": {
+                  "$ref": "#/definitions/smsCourierTemplate"
                 }
               }
             }

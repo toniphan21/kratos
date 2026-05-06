@@ -10,6 +10,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"time"
 
 	stderrors "errors"
 
@@ -20,6 +21,9 @@ import (
 	"github.com/ory/herodot"
 	"github.com/ory/jsonschema/v3"
 	"github.com/ory/kratos/courier"
+	"github.com/ory/kratos/courier/template"
+	"github.com/ory/kratos/courier/template/email"
+	"github.com/ory/kratos/courier/template/sms"
 	"github.com/ory/kratos/driver/config"
 	"github.com/ory/kratos/schema"
 	"github.com/ory/kratos/x"
@@ -45,6 +49,7 @@ type (
 		logrusx.Provider
 		x.TransactionPersistenceProvider
 		PendingTraitsChangePersistenceProvider
+		template.Dependencies
 	}
 	ManagementProvider interface {
 		IdentityManager() *Manager
@@ -593,3 +598,76 @@ func (m *Manager) CountActiveMultiFactorCredentials(ctx context.Context, i *Iden
 }
 
 var ErrConcurrentModification = stderrors.New("concurrent modification detected")
+
+// AddressRef identifies a verifiable address by its value and channel.
+// Used by the notify_previous_addresses hook to persist the set of
+// addresses that should receive a change notification.
+type AddressRef struct {
+	Value string `json:"value"`
+	Via   string `json:"via"`
+}
+
+// SendVerifiableAddressChangedNotifications queues a change notification to
+// each target via the appropriate courier channel. Errors from individual
+// targets are collected and returned as a joined error but do not
+// short-circuit the batch — a failure to notify one recipient should not
+// prevent others from receiving their notification.
+func (m *Manager) SendVerifiableAddressChangedNotifications(
+	ctx context.Context,
+	targets []AddressRef,
+	i *Identity,
+) (err error) {
+	ctx, span := m.r.Tracer(ctx).Tracer().Start(ctx, "identity.Manager.SendVerifiableAddressChangedNotifications")
+	defer otelx.End(span, &err)
+
+	if len(targets) == 0 {
+		return nil
+	}
+
+	c, err := m.r.Courier(ctx)
+	if err != nil {
+		return err
+	}
+
+	model, err := x.StructToMap(i)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	changedAt := time.Now().UTC().Format(time.RFC3339)
+
+	var errs []error
+	for _, t := range targets {
+		switch t.Via {
+		case AddressTypeEmail:
+			tpl := email.NewVerifiableAddressChanged(m.r, &email.VerifiableAddressChangedModel{
+				To:        t.Value,
+				Identity:  model,
+				ChangedAt: changedAt,
+			})
+			if _, qerr := c.QueueEmail(ctx, tpl); qerr != nil {
+				m.r.Logger().WithError(qerr).
+					WithField("via", t.Via).
+					Warn("Failed to queue verifiable-address-change email.")
+				errs = append(errs, qerr)
+			}
+		case AddressTypeSMS:
+			tpl := sms.NewVerifiableAddressChanged(m.r, &sms.VerifiableAddressChangedModel{
+				To:        t.Value,
+				Identity:  model,
+				ChangedAt: changedAt,
+			})
+			if _, qerr := c.QueueSMS(ctx, tpl); qerr != nil {
+				m.r.Logger().WithError(qerr).
+					WithField("via", t.Via).
+					Warn("Failed to queue verifiable-address-change SMS.")
+				errs = append(errs, qerr)
+			}
+		default:
+			m.r.Logger().
+				WithField("via", t.Via).
+				Warn("Skipping verifiable-address-change notification target with unsupported Via.")
+		}
+	}
+
+	return stderrors.Join(errs...)
+}

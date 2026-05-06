@@ -66,9 +66,9 @@ func (e *Verifier) ExecutePostRegistrationPostPersistHook(w http.ResponseWriter,
 	})
 }
 
-func (e *Verifier) ExecuteSettingsPostPersistHook(w http.ResponseWriter, r *http.Request, f *settings.Flow, i *identity.Identity, _ *session.Session) error {
+func (e *Verifier) ExecuteSettingsPostPersistHook(w http.ResponseWriter, r *http.Request, params settings.PostHookPostPersistExecutorParams) error {
 	return otelx.WithSpan(r.Context(), "selfservice.hook.Verifier.ExecuteSettingsPostPersistHook", func(ctx context.Context) error {
-		return e.do(w, r.WithContext(ctx), i, f, nil)
+		return e.do(w, r.WithContext(ctx), params.Updated, params.Flow, nil)
 	})
 }
 

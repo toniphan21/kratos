@@ -109,7 +109,11 @@ func TestVerifyNewAddress(t *testing.T) {
 		r = r.WithContext(ctx)
 		w := httptest.NewRecorder()
 
-		err := h.ExecuteSettingsPrePersistHook(w, r, f, proposed, sess)
+		err := h.ExecuteSettingsPrePersistHook(w, r, settings.PostHookPrePersistExecutorParams{
+			Flow:     f,
+			Identity: proposed,
+			Session:  sess,
+		})
 		require.NoError(t, err, "hook should be a no-op when address did not change")
 	})
 
@@ -141,7 +145,11 @@ func TestVerifyNewAddress(t *testing.T) {
 		r = r.WithContext(ctx)
 		w := httptest.NewRecorder()
 
-		err := h.ExecuteSettingsPrePersistHook(w, r, f, proposed, sess)
+		err := h.ExecuteSettingsPrePersistHook(w, r, settings.PostHookPrePersistExecutorParams{
+			Flow:     f,
+			Identity: proposed,
+			Session:  sess,
+		})
 		require.Error(t, err)
 		require.True(t, errors.Is(err, settings.ErrHookAbortFlow), "expected ErrHookAbortFlow, got: %v", err)
 
@@ -205,7 +213,11 @@ func TestVerifyNewAddress(t *testing.T) {
 		r = r.WithContext(ctx)
 		w := httptest.NewRecorder()
 
-		err := h.ExecuteSettingsPrePersistHook(w, r, f1, proposed1, sess)
+		err := h.ExecuteSettingsPrePersistHook(w, r, settings.PostHookPrePersistExecutorParams{
+			Flow:     f1,
+			Identity: proposed1,
+			Session:  sess,
+		})
 		require.True(t, errors.Is(err, settings.ErrHookAbortFlow))
 
 		vfID1 := f1.ContinueWith()[0].(*flow.ContinueWithVerificationUI).Flow.ID
@@ -229,7 +241,11 @@ func TestVerifyNewAddress(t *testing.T) {
 		}
 
 		w2 := httptest.NewRecorder()
-		err = h.ExecuteSettingsPrePersistHook(w2, r, f2, proposed2, sess)
+		err = h.ExecuteSettingsPrePersistHook(w2, r, settings.PostHookPrePersistExecutorParams{
+			Flow:     f2,
+			Identity: proposed2,
+			Session:  sess,
+		})
 		require.True(t, errors.Is(err, settings.ErrHookAbortFlow))
 
 		vfID2 := f2.ContinueWith()[0].(*flow.ContinueWithVerificationUI).Flow.ID
@@ -280,7 +296,11 @@ func TestVerifyNewAddress(t *testing.T) {
 		r = r.WithContext(ctx)
 		w := httptest.NewRecorder()
 
-		err := h.ExecuteSettingsPrePersistHook(w, r, f, proposed, sess)
+		err := h.ExecuteSettingsPrePersistHook(w, r, settings.PostHookPrePersistExecutorParams{
+			Flow:     f,
+			Identity: proposed,
+			Session:  sess,
+		})
 		// Should abort with exactly one changed address (not two, not zero).
 		require.Error(t, err)
 		require.True(t, errors.Is(err, settings.ErrHookAbortFlow), "expected ErrHookAbortFlow, got: %v", err)
@@ -324,7 +344,11 @@ func TestVerifyNewAddress(t *testing.T) {
 		r = r.WithContext(ctx)
 		w := httptest.NewRecorder()
 
-		err := h.ExecuteSettingsPrePersistHook(w, r, f, proposed, sess)
+		err := h.ExecuteSettingsPrePersistHook(w, r, settings.PostHookPrePersistExecutorParams{
+			Flow:     f,
+			Identity: proposed,
+			Session:  sess,
+		})
 		require.NoError(t, err, "hook should be a no-op when no addresses changed")
 		assert.Empty(t, f.ContinueWith())
 	})
@@ -357,7 +381,11 @@ func TestVerifyNewAddress(t *testing.T) {
 		r = r.WithContext(ctx)
 		w := httptest.NewRecorder()
 
-		err := h.ExecuteSettingsPrePersistHook(w, r, f, proposed, sess)
+		err := h.ExecuteSettingsPrePersistHook(w, r, settings.PostHookPrePersistExecutorParams{
+			Flow:     f,
+			Identity: proposed,
+			Session:  sess,
+		})
 		require.Error(t, err)
 		require.True(t, errors.Is(err, settings.ErrHookAbortFlow), "expected ErrHookAbortFlow, got: %v", err)
 

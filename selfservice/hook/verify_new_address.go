@@ -59,10 +59,10 @@ func NewVerifyNewAddress(r verifyNewAddressDependencies) *VerifyNewAddress {
 
 func (e *VerifyNewAddress) ExecuteSettingsPrePersistHook(
 	w http.ResponseWriter, r *http.Request,
-	f *settings.Flow, i *identity.Identity, s *session.Session,
+	params settings.PostHookPrePersistExecutorParams,
 ) error {
 	return otelx.WithSpan(r.Context(), "selfservice.hook.VerifyNewAddress.ExecuteSettingsPrePersistHook", func(ctx context.Context) error {
-		return e.execute(ctx, w, r, f, i, s)
+		return e.execute(ctx, w, r, params.Flow, params.Identity, params.Session)
 	})
 }
 

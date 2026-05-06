@@ -56,6 +56,10 @@ func (m *RegistryDefault) HookVerifyNewAddress() *hook.VerifyNewAddress {
 	return m.hookVerifyNewAddress
 }
 
+func (m *RegistryDefault) HookNotifyPreviousAddresses(c *hook.NotifyPreviousAddressesConfig) *hook.NotifyPreviousAddresses {
+	return hook.NewNotifyPreviousAddresses(m, c)
+}
+
 func (m *RegistryDefault) WithHooks(hooks map[string]func(config.SelfServiceHook) interface{}) {
 	m.injectedSelfserviceHooks = hooks
 }
@@ -100,6 +104,17 @@ allHooksLoop:
 			}
 		case hook.KeyVerifyNewAddress:
 			if h, ok := any(m.HookVerifyNewAddress()).(T); ok {
+				hooks = append(hooks, h)
+			}
+		case hook.KeyNotifyPreviousAddresses:
+			cfg := &hook.NotifyPreviousAddressesConfig{}
+			if len(h.Config) > 0 {
+				if err := json.Unmarshal(h.Config, cfg); err != nil {
+					m.l.WithError(err).WithField("raw_config", string(h.Config)).Error("failed to unmarshal hook configuration, ignoring hook")
+					return nil, errors.WithStack(fmt.Errorf("failed to unmarshal notify_previous_addresses configuration for %s: %w", credentialsType, err))
+				}
+			}
+			if h, ok := any(m.HookNotifyPreviousAddresses(cfg)).(T); ok {
 				hooks = append(hooks, h)
 			}
 		default:

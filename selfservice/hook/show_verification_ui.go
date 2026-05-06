@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/ory/kratos/identity"
 	"github.com/ory/kratos/selfservice/flow/settings"
 
 	"github.com/gofrs/uuid"
@@ -65,8 +64,8 @@ func (e *ShowVerificationUIHook) ExecuteLoginPostHook(_ http.ResponseWriter, r *
 	return e.execute(r, f)
 }
 
-func (e *ShowVerificationUIHook) ExecuteSettingsPostPersistHook(w http.ResponseWriter, r *http.Request, f *settings.Flow, id *identity.Identity, s *session.Session) error {
-	return e.execute(r, f)
+func (e *ShowVerificationUIHook) ExecuteSettingsPostPersistHook(w http.ResponseWriter, r *http.Request, params settings.PostHookPostPersistExecutorParams) error {
+	return e.execute(r, params.Flow)
 }
 
 type verificationUIFlow interface {
