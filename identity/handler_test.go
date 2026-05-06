@@ -46,6 +46,18 @@ import (
 
 var ignoreDefault = []string{"id", "schema_url", "state_changed_at", "created_at", "updated_at"}
 
+// sharedBcryptTestHash is a single bcrypt hash precomputed at MinCost and
+// reused by every fixture identity in batch-import tests. The tests assert
+// on storage/identity-creation behavior, not password verification, so the
+// concrete hash value is irrelevant — only the format matters.
+var sharedBcryptTestHash = func() string {
+	g, err := bcrypt.GenerateFromPassword([]byte("password"), bcrypt.MinCost)
+	if err != nil {
+		panic(err)
+	}
+	return string(g)
+}()
+
 func TestHandler(t *testing.T) {
 	t.Parallel()
 
@@ -3070,9 +3082,7 @@ func validCreateIdentityBody(t *testing.T, prefix string, i int, plainPassword b
 		Password: fmt.Sprintf("password-%d", i),
 	}
 	if !plainPassword {
-		g, err := bcrypt.GenerateFromPassword([]byte(fmt.Sprintf("password-%d", i)), 6)
-		require.NoError(t, err)
-		conf.Password = string(g)
+		conf.Password = sharedBcryptTestHash
 	}
 	externalID := ""
 	if i%2 == 0 {
