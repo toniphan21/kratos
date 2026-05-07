@@ -70,6 +70,31 @@ type Persister interface {
 
 	// RevokeSessionsIdentityExcept marks all except the given session of an identity inactive. It returns the number of sessions that were revoked.
 	RevokeSessionsIdentityExcept(ctx context.Context, iID, sID uuid.UUID) (int, error)
+
+	// RevokeSessionsByIdentities marks all active sessions inactive for the given identity IDs. Returns the number of rows updated.
+	RevokeSessionsByIdentities(ctx context.Context, identityIDs []uuid.UUID) (int, error)
+
+	// RevokeSessionsByIDs marks the listed sessions inactive (only ones currently active). Returns the number of rows updated.
+	RevokeSessionsByIDs(ctx context.Context, sessionIDs []uuid.UUID) (int, error)
+
+	// RevokeAllSessions deactivates up to `limit` currently-active sessions
+	// in the caller's network in a single SQL statement and returns the
+	// number of rows actually updated (in the range [0, limit]).
+	// Already-inactive sessions are skipped. A returned count below `limit`
+	// signals that no more matching rows remain.
+	RevokeAllSessions(ctx context.Context, limit int) (int, error)
+
+	// DeleteSessionsByIdentities permanently deletes all sessions belonging to the given identity IDs. Returns the number of rows deleted.
+	DeleteSessionsByIdentities(ctx context.Context, identityIDs []uuid.UUID) (int, error)
+
+	// DeleteSessionsByIDs permanently deletes the listed sessions. Returns the number of rows deleted.
+	DeleteSessionsByIDs(ctx context.Context, sessionIDs []uuid.UUID) (int, error)
+
+	// DeleteAllSessions permanently deletes up to `limit` sessions in the
+	// caller's network in a single SQL statement and returns the number of
+	// rows actually deleted (in the range [0, limit]). A returned count
+	// below `limit` signals that no more matching rows remain.
+	DeleteAllSessions(ctx context.Context, limit int) (int, error)
 }
 
 type DevicePersister interface {

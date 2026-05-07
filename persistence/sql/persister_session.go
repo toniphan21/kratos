@@ -303,20 +303,18 @@ func (p *Persister) UpsertSession(ctx context.Context, s *session.Session) (err 
 	}))
 }
 
+// DeleteSession permanently deletes a single session. Returns
+// sqlcon.ErrNoRows() when no matching session is found in the caller's
+// network.
 func (p *Persister) DeleteSession(ctx context.Context, sid uuid.UUID) (err error) {
 	ctx, span := p.r.Tracer(ctx).Tracer().Start(ctx, "persistence.sql.DeleteSession")
 	defer otelx.End(span, &err)
 
-	nid := p.NetworkID(ctx)
-	//#nosec G201 -- TableName is static
-	count, err := p.GetConnection(ctx).RawQuery(fmt.Sprintf("DELETE FROM %s WHERE id = ? AND nid = ?", session.Session{}.TableName()),
-		sid,
-		nid,
-	).ExecWithCount()
+	n, err := p.DeleteSessionsByIDs(ctx, []uuid.UUID{sid})
 	if err != nil {
-		return sqlcon.HandleError(err)
+		return err
 	}
-	if count == 0 {
+	if n == 0 {
 		return errors.WithStack(sqlcon.ErrNoRows())
 	}
 	return nil
@@ -430,7 +428,8 @@ func (p *Persister) RevokeSessionByToken(ctx context.Context, token string) (err
 	return nil
 }
 
-// RevokeSessionById revokes a given session
+// RevokeSessionById revokes a given session. Returns sqlcon.ErrNoRows() when
+// no matching session is found in the caller's network.
 func (p *Persister) RevokeSessionById(ctx context.Context, sID uuid.UUID) (err error) {
 	ctx, span := p.r.Tracer(ctx).Tracer().Start(ctx, "persistence.sql.RevokeSessionById")
 	defer otelx.End(span, &err)
@@ -487,6 +486,122 @@ func (p *Persister) RevokeSessionsIdentityExcept(ctx context.Context, iID, sID u
 		sID,
 		p.NetworkID(ctx),
 	).ExecWithCount()
+	if err != nil {
+		return 0, sqlcon.HandleError(err)
+	}
+	return count, nil
+}
+
+// RevokeSessionsByIdentities marks all currently active sessions inactive for the given identity IDs.
+func (p *Persister) RevokeSessionsByIdentities(ctx context.Context, identityIDs []uuid.UUID) (count int, err error) {
+	ctx, span := p.r.Tracer(ctx).Tracer().Start(ctx, "persistence.sql.RevokeSessionsByIdentities")
+	defer otelx.End(span, &err)
+
+	if len(identityIDs) == 0 {
+		return 0, nil
+	}
+
+	//#nosec G201 -- TableName is static.
+	count, err = p.GetConnection(ctx).RawQuery(fmt.Sprintf(
+		"UPDATE %s SET active = false WHERE identity_id IN (?) AND active = true AND nid = ?",
+		session.Session{}.TableName(),
+	), identityIDs, p.NetworkID(ctx)).ExecWithCount()
+	if err != nil {
+		return 0, sqlcon.HandleError(err)
+	}
+	return count, nil
+}
+
+// RevokeSessionsByIDs marks the listed sessions inactive (only ones currently active).
+func (p *Persister) RevokeSessionsByIDs(ctx context.Context, sessionIDs []uuid.UUID) (count int, err error) {
+	ctx, span := p.r.Tracer(ctx).Tracer().Start(ctx, "persistence.sql.RevokeSessionsByIDs")
+	defer otelx.End(span, &err)
+
+	if len(sessionIDs) == 0 {
+		return 0, nil
+	}
+
+	//#nosec G201 -- TableName is static.
+	count, err = p.GetConnection(ctx).RawQuery(fmt.Sprintf(
+		"UPDATE %s SET active = false WHERE id IN (?) AND active = true AND nid = ?",
+		session.Session{}.TableName(),
+	), sessionIDs, p.NetworkID(ctx)).ExecWithCount()
+	if err != nil {
+		return 0, sqlcon.HandleError(err)
+	}
+	return count, nil
+}
+
+// RevokeAllSessions deactivates up to `limit` currently-active sessions in
+// the caller's network in a single SQL statement and returns the number of
+// rows actually updated (in the range [0, limit]).
+func (p *Persister) RevokeAllSessions(ctx context.Context, limit int) (count int, err error) {
+	ctx, span := p.r.Tracer(ctx).Tracer().Start(ctx, "persistence.sql.RevokeAllSessions")
+	defer otelx.End(span, &err)
+
+	//#nosec G201 -- TableName is static.
+	count, err = p.GetConnection(ctx).RawQuery(fmt.Sprintf(
+		"UPDATE %[1]s SET active = false WHERE id IN (SELECT id FROM (SELECT id FROM %[1]s c WHERE active = true AND nid = ? LIMIT ?) AS s)",
+		session.Session{}.TableName(),
+	), p.NetworkID(ctx), limit).ExecWithCount()
+	if err != nil {
+		return 0, sqlcon.HandleError(err)
+	}
+	return count, nil
+}
+
+// DeleteSessionsByIdentities permanently deletes all sessions belonging to the given identity IDs.
+func (p *Persister) DeleteSessionsByIdentities(ctx context.Context, identityIDs []uuid.UUID) (count int, err error) {
+	ctx, span := p.r.Tracer(ctx).Tracer().Start(ctx, "persistence.sql.DeleteSessionsByIdentities")
+	defer otelx.End(span, &err)
+
+	if len(identityIDs) == 0 {
+		return 0, nil
+	}
+
+	//#nosec G201 -- TableName is static.
+	count, err = p.GetConnection(ctx).RawQuery(fmt.Sprintf(
+		"DELETE FROM %s WHERE identity_id IN (?) AND nid = ?",
+		session.Session{}.TableName(),
+	), identityIDs, p.NetworkID(ctx)).ExecWithCount()
+	if err != nil {
+		return 0, sqlcon.HandleError(err)
+	}
+	return count, nil
+}
+
+// DeleteSessionsByIDs permanently deletes the listed sessions.
+func (p *Persister) DeleteSessionsByIDs(ctx context.Context, sessionIDs []uuid.UUID) (count int, err error) {
+	ctx, span := p.r.Tracer(ctx).Tracer().Start(ctx, "persistence.sql.DeleteSessionsByIDs")
+	defer otelx.End(span, &err)
+
+	if len(sessionIDs) == 0 {
+		return 0, nil
+	}
+
+	//#nosec G201 -- TableName is static.
+	count, err = p.GetConnection(ctx).RawQuery(fmt.Sprintf(
+		"DELETE FROM %s WHERE id IN (?) AND nid = ?",
+		session.Session{}.TableName(),
+	), sessionIDs, p.NetworkID(ctx)).ExecWithCount()
+	if err != nil {
+		return 0, sqlcon.HandleError(err)
+	}
+	return count, nil
+}
+
+// DeleteAllSessions permanently deletes up to `limit` sessions in the
+// caller's network in a single SQL statement and returns the number of rows
+// actually deleted (in the range [0, limit]).
+func (p *Persister) DeleteAllSessions(ctx context.Context, limit int) (count int, err error) {
+	ctx, span := p.r.Tracer(ctx).Tracer().Start(ctx, "persistence.sql.DeleteAllSessions")
+	defer otelx.End(span, &err)
+
+	//#nosec G201 -- TableName is static
+	count, err = p.GetConnection(ctx).RawQuery(fmt.Sprintf(
+		"DELETE FROM %[1]s WHERE id IN (SELECT id FROM (SELECT id FROM %[1]s c WHERE nid = ? LIMIT ?) AS s)",
+		session.Session{}.TableName(),
+	), p.NetworkID(ctx), limit).ExecWithCount()
 	if err != nil {
 		return 0, sqlcon.HandleError(err)
 	}

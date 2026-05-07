@@ -1175,6 +1175,63 @@
           }
         ],
         "x-ory-ratelimit-bucket": "kratos-admin-medium"
+      },
+      "post": {
+        "description": "Disable or delete sessions for a list of identities or a list of sessions in\na single call. The `action` field selects the operation:\n\n`disable` — deactivate matching sessions (sets `active = false`, preserves\naudit data).\n`delete` — permanently delete matching sessions.\n\nExactly one of `identities` or `sessions` must be provided. To scope the\noperation to every session in the network, pass `identities: [\"*\"]`; the\nwildcard is not accepted in the `sessions` field. Up to 500 explicit IDs\nare accepted per call.\n\nAll requests return `200 OK` with `{processed, more}`. `processed` reports\nhow many rows the call affected; for `disable` it counts only sessions\nthat were active before the call. `more` is `true` only when a wildcard\nrequest reached the per-call batch limit and additional rows may remain;\ncallers drain the network by re-issuing the same request while `more` is\n`true`. Explicit-IDs requests always return `more: false`.",
+        "consumes": [
+          "application/json"
+        ],
+        "schemes": [
+          "http",
+          "https"
+        ],
+        "tags": [
+          "identity"
+        ],
+        "summary": "Manage sessions in bulk",
+        "operationId": "manageSessions",
+        "parameters": [
+          {
+            "name": "Body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/manageSessionsBody"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "manageSessionsResponse",
+            "schema": {
+              "$ref": "#/definitions/manageSessionsResponse"
+            }
+          },
+          "400": {
+            "description": "errorGeneric",
+            "schema": {
+              "$ref": "#/definitions/errorGeneric"
+            }
+          },
+          "401": {
+            "description": "errorGeneric",
+            "schema": {
+              "$ref": "#/definitions/errorGeneric"
+            }
+          },
+          "default": {
+            "description": "errorGeneric",
+            "schema": {
+              "$ref": "#/definitions/errorGeneric"
+            }
+          }
+        },
+        "security": [
+          {
+            "oryAccessToken": []
+          }
+        ],
+        "x-ory-ratelimit-bucket": "kratos-admin-low"
       }
     },
     "/admin/sessions/{id}": {
@@ -5574,6 +5631,55 @@
         "logout_url": {
           "description": "LogoutURL can be opened in a browser to sign the user out.\n\nformat: uri",
           "type": "string"
+        }
+      }
+    },
+    "manageSessionsBody": {
+      "description": "Body for the bulk session management endpoint. Exactly one of `identities`\nor `sessions` must be provided. To operate on every session in the network,\npass `identities: [\"*\"]` — the wildcard must appear alone, never mixed with\nexplicit IDs.",
+      "type": "object",
+      "title": "Manage Sessions Body",
+      "required": [
+        "action"
+      ],
+      "properties": {
+        "action": {
+          "description": "Action to perform on the matching sessions.\ndisable ManageSessionsActionDisable\ndelete ManageSessionsActionDelete",
+          "type": "string",
+          "enum": [
+            "disable",
+            "delete"
+          ],
+          "x-go-enum-desc": "disable ManageSessionsActionDisable\ndelete ManageSessionsActionDelete"
+        },
+        "identities": {
+          "description": "Identity IDs whose sessions should be disabled or deleted, or `[\"*\"]`\nto operate on every session in the network. Mutually exclusive with\n`sessions`.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "sessions": {
+          "description": "Session IDs to disable or delete. Mutually exclusive with `identities`.\nThe wildcard `[\"*\"]` is not accepted in this field — pass\n`identities: [\"*\"]` to scope the operation to every session in the\nnetwork.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "manageSessionsResponse": {
+      "description": "Response body for the bulk session management endpoint. Reports how many\nrows the call processed and, for the wildcard variant, whether the network\nstill has matching rows left. Explicit-IDs requests always return\n`more: false`. Wildcard callers drain the network by re-issuing the same\nrequest while `more` is `true`.",
+      "type": "object",
+      "title": "Manage Sessions Response",
+      "properties": {
+        "more": {
+          "description": "True when the call reached the per-call batch limit and additional\nmatching rows may remain. Always false for explicit-IDs requests.",
+          "type": "boolean"
+        },
+        "processed": {
+          "description": "Number of sessions processed in this call. For `disable`, counts only\nsessions that were active before the call (already-inactive sessions\nare skipped). For `delete`, counts every matching row removed.",
+          "type": "integer",
+          "format": "int64"
         }
       }
     },

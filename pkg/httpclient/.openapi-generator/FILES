@@ -84,6 +84,8 @@ docs/LoginFlowTestDebugPayload.md
 docs/LoginFlowTestSchemaValidationError.md
 docs/LoginFlowTestStepError.md
 docs/LogoutFlow.md
+docs/ManageSessionsBody.md
+docs/ManageSessionsResponse.md
 docs/Message.md
 docs/MessageDispatch.md
 docs/MetadataAPI.md
@@ -238,6 +240,8 @@ model_login_flow_test_debug_payload.go
 model_login_flow_test_schema_validation_error.go
 model_login_flow_test_step_error.go
 model_logout_flow.go
+model_manage_sessions_body.go
+model_manage_sessions_response.go
 model_message.go
 model_message_dispatch.go
 model_needs_privileged_session_error.go

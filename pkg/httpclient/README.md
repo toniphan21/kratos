@@ -132,6 +132,7 @@ Class | Method | HTTP request | Description
 *IdentityAPI* | [**ListIdentitySchemas**](docs/IdentityAPI.md#listidentityschemas) | **Get** /schemas | Get all Identity Schemas
 *IdentityAPI* | [**ListIdentitySessions**](docs/IdentityAPI.md#listidentitysessions) | **Get** /admin/identities/{id}/sessions | List an Identity&#39;s Sessions
 *IdentityAPI* | [**ListSessions**](docs/IdentityAPI.md#listsessions) | **Get** /admin/sessions | List All Sessions
+*IdentityAPI* | [**ManageSessions**](docs/IdentityAPI.md#managesessions) | **Post** /admin/sessions | Manage sessions in bulk
 *IdentityAPI* | [**PatchIdentity**](docs/IdentityAPI.md#patchidentity) | **Patch** /admin/identities/{id} | Patch an Identity
 *IdentityAPI* | [**UpdateIdentity**](docs/IdentityAPI.md#updateidentity) | **Put** /admin/identities/{id} | Update an Identity
 *MetadataAPI* | [**GetVersion**](docs/MetadataAPI.md#getversion) | **Get** /version | Return Running Software Version.
@@ -213,6 +214,8 @@ Class | Method | HTTP request | Description
  - [LoginFlowTestSchemaValidationError](docs/LoginFlowTestSchemaValidationError.md)
  - [LoginFlowTestStepError](docs/LoginFlowTestStepError.md)
  - [LogoutFlow](docs/LogoutFlow.md)
+ - [ManageSessionsBody](docs/ManageSessionsBody.md)
+ - [ManageSessionsResponse](docs/ManageSessionsResponse.md)
  - [Message](docs/Message.md)
  - [MessageDispatch](docs/MessageDispatch.md)
  - [NeedsPrivilegedSessionError](docs/NeedsPrivilegedSessionError.md)

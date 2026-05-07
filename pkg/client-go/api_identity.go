@@ -327,6 +327,37 @@ type IdentityAPI interface {
 	ListSessionsExecute(r IdentityAPIListSessionsRequest) ([]Session, *http.Response, error)
 
 	/*
+			ManageSessions Manage sessions in bulk
+
+			Disable or delete sessions for a list of identities or a list of sessions in
+		a single call. The `action` field selects the operation:
+
+		`disable` — deactivate matching sessions (sets `active = false`, preserves
+		audit data).
+		`delete` — permanently delete matching sessions.
+
+		Exactly one of `identities` or `sessions` must be provided. To scope the
+		operation to every session in the network, pass `identities: ["*"]`; the
+		wildcard is not accepted in the `sessions` field. Up to 500 explicit IDs
+		are accepted per call.
+
+		All requests return `200 OK` with `{processed, more}`. `processed` reports
+		how many rows the call affected; for `disable` it counts only sessions
+		that were active before the call. `more` is `true` only when a wildcard
+		request reached the per-call batch limit and additional rows may remain;
+		callers drain the network by re-issuing the same request while `more` is
+		`true`. Explicit-IDs requests always return `more: false`.
+
+			@param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
+			@return IdentityAPIManageSessionsRequest
+	*/
+	ManageSessions(ctx context.Context) IdentityAPIManageSessionsRequest
+
+	// ManageSessionsExecute executes the request
+	//  @return ManageSessionsResponse
+	ManageSessionsExecute(r IdentityAPIManageSessionsRequest) (*ManageSessionsResponse, *http.Response, error)
+
+	/*
 			PatchIdentity Patch an Identity
 
 			Partially updates an [identity's](https://www.ory.com/docs/kratos/concepts/identity-user-model) field using [JSON Patch](https://jsonpatch.com/).
@@ -3212,6 +3243,178 @@ func (a *IdentityAPIService) ListSessionsExecute(r IdentityAPIListSessionsReques
 			error: localVarHTTPResponse.Status,
 		}
 		if localVarHTTPResponse.StatusCode == 400 {
+			var v ErrorGeneric
+			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
+			if err != nil {
+				newErr.error = err.Error()
+				return localVarReturnValue, localVarHTTPResponse, newErr
+			}
+			newErr.error = formatErrorMessage(localVarHTTPResponse.Status, &v)
+			newErr.model = v
+			return localVarReturnValue, localVarHTTPResponse, newErr
+		}
+		var v ErrorGeneric
+		err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
+		if err != nil {
+			newErr.error = err.Error()
+			return localVarReturnValue, localVarHTTPResponse, newErr
+		}
+		newErr.error = formatErrorMessage(localVarHTTPResponse.Status, &v)
+		newErr.model = v
+		return localVarReturnValue, localVarHTTPResponse, newErr
+	}
+
+	err = a.client.decode(&localVarReturnValue, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
+	if err != nil {
+		newErr := &GenericOpenAPIError{
+			body:  localVarBody,
+			error: err.Error(),
+		}
+		return localVarReturnValue, localVarHTTPResponse, newErr
+	}
+
+	return localVarReturnValue, localVarHTTPResponse, nil
+}
+
+type IdentityAPIManageSessionsRequest struct {
+	ctx                context.Context
+	ApiService         IdentityAPI
+	manageSessionsBody *ManageSessionsBody
+}
+
+func (r IdentityAPIManageSessionsRequest) ManageSessionsBody(manageSessionsBody ManageSessionsBody) IdentityAPIManageSessionsRequest {
+	r.manageSessionsBody = &manageSessionsBody
+	return r
+}
+
+func (r IdentityAPIManageSessionsRequest) Execute() (*ManageSessionsResponse, *http.Response, error) {
+	return r.ApiService.ManageSessionsExecute(r)
+}
+
+/*
+ManageSessions Manage sessions in bulk
+
+Disable or delete sessions for a list of identities or a list of sessions in
+a single call. The `action` field selects the operation:
+
+`disable` — deactivate matching sessions (sets `active = false`, preserves
+audit data).
+`delete` — permanently delete matching sessions.
+
+Exactly one of `identities` or `sessions` must be provided. To scope the
+operation to every session in the network, pass `identities: ["*"]`; the
+wildcard is not accepted in the `sessions` field. Up to 500 explicit IDs
+are accepted per call.
+
+All requests return `200 OK` with `{processed, more}`. `processed` reports
+how many rows the call affected; for `disable` it counts only sessions
+that were active before the call. `more` is `true` only when a wildcard
+request reached the per-call batch limit and additional rows may remain;
+callers drain the network by re-issuing the same request while `more` is
+`true`. Explicit-IDs requests always return `more: false`.
+
+	@param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
+	@return IdentityAPIManageSessionsRequest
+*/
+func (a *IdentityAPIService) ManageSessions(ctx context.Context) IdentityAPIManageSessionsRequest {
+	return IdentityAPIManageSessionsRequest{
+		ApiService: a,
+		ctx:        ctx,
+	}
+}
+
+// Execute executes the request
+//
+//	@return ManageSessionsResponse
+func (a *IdentityAPIService) ManageSessionsExecute(r IdentityAPIManageSessionsRequest) (*ManageSessionsResponse, *http.Response, error) {
+	var (
+		localVarHTTPMethod  = http.MethodPost
+		localVarPostBody    interface{}
+		formFiles           []formFile
+		localVarReturnValue *ManageSessionsResponse
+	)
+
+	localBasePath, err := a.client.cfg.ServerURLWithContext(r.ctx, "IdentityAPIService.ManageSessions")
+	if err != nil {
+		return localVarReturnValue, nil, &GenericOpenAPIError{error: err.Error()}
+	}
+
+	localVarPath := localBasePath + "/admin/sessions"
+
+	localVarHeaderParams := make(map[string]string)
+	localVarQueryParams := url.Values{}
+	localVarFormParams := url.Values{}
+	if r.manageSessionsBody == nil {
+		return localVarReturnValue, nil, reportError("manageSessionsBody is required and must be specified")
+	}
+
+	// to determine the Content-Type header
+	localVarHTTPContentTypes := []string{"application/json"}
+
+	// set Content-Type header
+	localVarHTTPContentType := selectHeaderContentType(localVarHTTPContentTypes)
+	if localVarHTTPContentType != "" {
+		localVarHeaderParams["Content-Type"] = localVarHTTPContentType
+	}
+
+	// to determine the Accept header
+	localVarHTTPHeaderAccepts := []string{"application/json"}
+
+	// set Accept header
+	localVarHTTPHeaderAccept := selectHeaderAccept(localVarHTTPHeaderAccepts)
+	if localVarHTTPHeaderAccept != "" {
+		localVarHeaderParams["Accept"] = localVarHTTPHeaderAccept
+	}
+	// body params
+	localVarPostBody = r.manageSessionsBody
+	if r.ctx != nil {
+		// API Key Authentication
+		if auth, ok := r.ctx.Value(ContextAPIKeys).(map[string]APIKey); ok {
+			if apiKey, ok := auth["oryAccessToken"]; ok {
+				var key string
+				if apiKey.Prefix != "" {
+					key = apiKey.Prefix + " " + apiKey.Key
+				} else {
+					key = apiKey.Key
+				}
+				localVarHeaderParams["Authorization"] = key
+			}
+		}
+	}
+	req, err := a.client.prepareRequest(r.ctx, localVarPath, localVarHTTPMethod, localVarPostBody, localVarHeaderParams, localVarQueryParams, localVarFormParams, formFiles)
+	if err != nil {
+		return localVarReturnValue, nil, err
+	}
+
+	localVarHTTPResponse, err := a.client.callAPI(req)
+	if err != nil || localVarHTTPResponse == nil {
+		return localVarReturnValue, localVarHTTPResponse, err
+	}
+
+	localVarBody, err := io.ReadAll(localVarHTTPResponse.Body)
+	localVarHTTPResponse.Body.Close()
+	localVarHTTPResponse.Body = io.NopCloser(bytes.NewBuffer(localVarBody))
+	if err != nil {
+		return localVarReturnValue, localVarHTTPResponse, err
+	}
+
+	if localVarHTTPResponse.StatusCode >= 300 {
+		newErr := &GenericOpenAPIError{
+			body:  localVarBody,
+			error: localVarHTTPResponse.Status,
+		}
+		if localVarHTTPResponse.StatusCode == 400 {
+			var v ErrorGeneric
+			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
+			if err != nil {
+				newErr.error = err.Error()
+				return localVarReturnValue, localVarHTTPResponse, newErr
+			}
+			newErr.error = formatErrorMessage(localVarHTTPResponse.Status, &v)
+			newErr.model = v
+			return localVarReturnValue, localVarHTTPResponse, newErr
+		}
+		if localVarHTTPResponse.StatusCode == 401 {
 			var v ErrorGeneric
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {

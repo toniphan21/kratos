@@ -864,6 +864,233 @@ func TestHandlerAdminSessionManagement(t *testing.T) {
 	})
 }
 
+func TestHandlerManageSessions(t *testing.T) {
+	t.Parallel()
+
+	_, reg := pkg.NewFastRegistryWithMocks(t, configx.WithValues(testhelpers.DefaultIdentitySchemaConfig("file://./stub/identity.schema.json")))
+	_, ts := testhelpers.NewKratosServer(t, reg)
+	client := testhelpers.NewClientWithCookies(t)
+
+	makeIdentityWithSession := func(t *testing.T) (*identity.Identity, *Session) {
+		var s *Session
+		require.NoError(t, faker.FakeData(&s))
+		s.Active = true
+		require.NoError(t, reg.Persister().CreateIdentity(t.Context(), s.Identity))
+		require.NoError(t, reg.SessionPersister().UpsertSession(t.Context(), s))
+		return s.Identity, s
+	}
+
+	post := func(t *testing.T, body string) *http.Response {
+		req, err := http.NewRequest("POST", ts.URL+"/admin/sessions", strings.NewReader(body))
+		require.NoError(t, err)
+		req.Header.Set("Content-Type", "application/json")
+		res, err := client.Do(req)
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = res.Body.Close() })
+		return res
+	}
+
+	decode := func(t *testing.T, res *http.Response) ManageSessionsResponse {
+		t.Helper()
+		var resp ManageSessionsResponse
+		require.NoError(t, json.NewDecoder(res.Body).Decode(&resp))
+		return resp
+	}
+
+	sessionActive := func(t *testing.T, sID uuid.UUID) bool {
+		s, err := reg.SessionPersister().GetSession(t.Context(), sID, ExpandNothing)
+		require.NoError(t, err)
+		return s.Active
+	}
+
+	sessionExists := func(t *testing.T, sID uuid.UUID) bool {
+		_, err := reg.SessionPersister().GetSession(t.Context(), sID, ExpandNothing)
+		if errors.Is(err, sqlcon.ErrNoRows()) {
+			return false
+		}
+		require.NoError(t, err)
+		return true
+	}
+
+	t.Run("case=disable by identities", func(t *testing.T) {
+		i, s := makeIdentityWithSession(t)
+		body := fmt.Sprintf(`{"action":"disable","identities":["%s"]}`, i.ID)
+		res := post(t, body)
+		require.Equal(t, http.StatusOK, res.StatusCode)
+		resp := decode(t, res)
+		assert.Equal(t, 1, resp.Processed)
+		assert.False(t, resp.More)
+		assert.False(t, sessionActive(t, s.ID))
+	})
+
+	t.Run("case=disable by sessions", func(t *testing.T) {
+		_, s := makeIdentityWithSession(t)
+		body := fmt.Sprintf(`{"action":"disable","sessions":["%s"]}`, s.ID)
+		res := post(t, body)
+		require.Equal(t, http.StatusOK, res.StatusCode)
+		resp := decode(t, res)
+		assert.Equal(t, 1, resp.Processed)
+		assert.False(t, resp.More)
+		assert.False(t, sessionActive(t, s.ID))
+	})
+
+	t.Run("case=delete by identities", func(t *testing.T) {
+		i, s := makeIdentityWithSession(t)
+		body := fmt.Sprintf(`{"action":"delete","identities":["%s"]}`, i.ID)
+		res := post(t, body)
+		require.Equal(t, http.StatusOK, res.StatusCode)
+		resp := decode(t, res)
+		assert.Equal(t, 1, resp.Processed)
+		assert.False(t, resp.More)
+		assert.False(t, sessionExists(t, s.ID))
+	})
+
+	t.Run("case=delete by sessions", func(t *testing.T) {
+		_, s := makeIdentityWithSession(t)
+		body := fmt.Sprintf(`{"action":"delete","sessions":["%s"]}`, s.ID)
+		res := post(t, body)
+		require.Equal(t, http.StatusOK, res.StatusCode)
+		resp := decode(t, res)
+		assert.Equal(t, 1, resp.Processed)
+		assert.False(t, resp.More)
+		assert.False(t, sessionExists(t, s.ID))
+	})
+
+	t.Run("case=invalid action", func(t *testing.T) {
+		res := post(t, `{"action":"flarble","identities":["00000000-0000-0000-0000-000000000001"]}`)
+		assert.Equal(t, http.StatusBadRequest, res.StatusCode)
+	})
+
+	t.Run("case=both filters set", func(t *testing.T) {
+		res := post(t, `{"action":"disable","identities":["00000000-0000-0000-0000-000000000001"],"sessions":["00000000-0000-0000-0000-000000000002"]}`)
+		assert.Equal(t, http.StatusBadRequest, res.StatusCode)
+	})
+
+	t.Run("case=neither filter set", func(t *testing.T) {
+		res := post(t, `{"action":"disable"}`)
+		assert.Equal(t, http.StatusBadRequest, res.StatusCode)
+	})
+
+	t.Run("case=empty array", func(t *testing.T) {
+		res := post(t, `{"action":"disable","identities":[]}`)
+		assert.Equal(t, http.StatusBadRequest, res.StatusCode)
+	})
+
+	t.Run("case=malformed UUID", func(t *testing.T) {
+		res := post(t, `{"action":"disable","identities":["not-a-uuid"]}`)
+		assert.Equal(t, http.StatusBadRequest, res.StatusCode)
+	})
+
+	t.Run("case=wildcard mixed with explicit id rejected", func(t *testing.T) {
+		res := post(t, `{"action":"disable","identities":["*","00000000-0000-0000-0000-000000000001"]}`)
+		assert.Equal(t, http.StatusBadRequest, res.StatusCode)
+	})
+
+	t.Run("case=wildcard via sessions field rejected (disable)", func(t *testing.T) {
+		res := post(t, `{"action":"disable","sessions":["*"]}`)
+		assert.Equal(t, http.StatusBadRequest, res.StatusCode)
+	})
+
+	t.Run("case=wildcard via sessions field rejected (delete)", func(t *testing.T) {
+		res := post(t, `{"action":"delete","sessions":["*"]}`)
+		assert.Equal(t, http.StatusBadRequest, res.StatusCode)
+	})
+
+	t.Run("case=oversize batch rejected", func(t *testing.T) {
+		ids := make([]string, ManageSessionsMaxIDs+1)
+		for i := range ids {
+			ids[i] = uuid.Must(uuid.NewV4()).String()
+		}
+		body := fmt.Sprintf(`{"action":"disable","identities":[%q`, ids[0])
+		for _, id := range ids[1:] {
+			body += "," + fmt.Sprintf("%q", id)
+		}
+		body += `]}`
+		res := post(t, body)
+		assert.Equal(t, http.StatusBadRequest, res.StatusCode)
+	})
+
+	t.Run("case=non-existent identity is silent no-op", func(t *testing.T) {
+		ghost := uuid.Must(uuid.NewV4()).String()
+		res := post(t, fmt.Sprintf(`{"action":"disable","identities":[%q]}`, ghost))
+		require.Equal(t, http.StatusOK, res.StatusCode)
+		resp := decode(t, res)
+		assert.Equal(t, 0, resp.Processed)
+		assert.False(t, resp.More)
+	})
+
+}
+
+// TestHandlerManageSessionsWildcard exercises the `["*"]` wildcard variants
+// of the manage-sessions endpoint. Each subtest disables or deletes every
+// session in the network, so they are isolated to their own registry to avoid
+// contaminating other tests that share state.
+func TestHandlerManageSessionsWildcard(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name        string
+		body        string
+		assertAfter func(t *testing.T, persister Persister, ids []uuid.UUID)
+	}{
+		{
+			name: "case=wildcard disable disables all sessions in network",
+			body: `{"action":"disable","identities":["*"]}`,
+			assertAfter: func(t *testing.T, persister Persister, ids []uuid.UUID) {
+				for _, id := range ids {
+					s, err := persister.GetSession(t.Context(), id, ExpandNothing)
+					require.NoError(t, err)
+					assert.False(t, s.Active, "session %s must be inactive", id)
+				}
+			},
+		},
+		{
+			name: "case=wildcard delete deletes all sessions in network",
+			body: `{"action":"delete","identities":["*"]}`,
+			assertAfter: func(t *testing.T, persister Persister, ids []uuid.UUID) {
+				for _, id := range ids {
+					_, err := persister.GetSession(t.Context(), id, ExpandNothing)
+					assert.ErrorIs(t, err, sqlcon.ErrNoRows(), "session %s must be deleted", id)
+				}
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			_, reg := pkg.NewFastRegistryWithMocks(t, configx.WithValues(testhelpers.DefaultIdentitySchemaConfig("file://./stub/identity.schema.json")))
+			_, ts := testhelpers.NewKratosServer(t, reg)
+			client := testhelpers.NewClientWithCookies(t)
+
+			ids := make([]uuid.UUID, 0, 2)
+			for range 2 {
+				var s *Session
+				require.NoError(t, faker.FakeData(&s))
+				s.Active = true
+				require.NoError(t, reg.Persister().CreateIdentity(t.Context(), s.Identity))
+				require.NoError(t, reg.SessionPersister().UpsertSession(t.Context(), s))
+				ids = append(ids, s.ID)
+			}
+
+			req, err := http.NewRequest("POST", ts.URL+"/admin/sessions", strings.NewReader(tc.body))
+			require.NoError(t, err)
+			req.Header.Set("Content-Type", "application/json")
+			res, err := client.Do(req)
+			require.NoError(t, err)
+			t.Cleanup(func() { _ = res.Body.Close() })
+
+			require.Equal(t, http.StatusOK, res.StatusCode, "wildcard requests return 200 with a body")
+			var resp ManageSessionsResponse
+			require.NoError(t, json.NewDecoder(res.Body).Decode(&resp))
+			assert.Equal(t, 2, resp.Processed, "the two seeded sessions are processed in the single batch")
+			assert.False(t, resp.More, "two sessions fit into one batch; nothing more to drain")
+			tc.assertAfter(t, reg.SessionPersister(), ids)
+		})
+	}
+}
+
 func TestHandlerSelfServiceSessionManagement(t *testing.T) {
 	t.Parallel()
 
