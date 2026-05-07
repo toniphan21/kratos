@@ -85,16 +85,17 @@ type CredentialsType string
 
 // Please make sure to add all of these values to the test that ensures they are created during migration
 const (
-	CredentialsTypePassword    CredentialsType = "password"
-	CredentialsTypeOIDC        CredentialsType = "oidc"
-	CredentialsTypeTOTP        CredentialsType = "totp"
-	CredentialsTypeLookup      CredentialsType = "lookup_secret"
-	CredentialsTypeWebAuthn    CredentialsType = "webauthn"
-	CredentialsTypeCodeAuth    CredentialsType = "code"
-	CredentialsTypePasskey     CredentialsType = "passkey"
-	CredentialsTypeProfile     CredentialsType = "profile"
-	CredentialsTypeSAML        CredentialsType = "saml"
-	CredentialsTypeDeviceAuthn CredentialsType = "deviceauthn"
+	CredentialsTypePassword        CredentialsType = "password"
+	CredentialsTypeOIDC            CredentialsType = "oidc"
+	CredentialsTypeTOTP            CredentialsType = "totp"
+	CredentialsTypeLookup          CredentialsType = "lookup_secret"
+	CredentialsTypeWebAuthn        CredentialsType = "webauthn"
+	CredentialsTypeCodeAuth        CredentialsType = "code"
+	CredentialsTypePasskey         CredentialsType = "passkey"
+	CredentialsTypeProfile         CredentialsType = "profile"
+	CredentialsTypeSAML            CredentialsType = "saml"
+	CredentialsTypeDeviceAuthn     CredentialsType = "deviceauthn"
+	CredentialsTypeIdentifierFirst CredentialsType = "identifier_first" // TODO(jonas): Used only for SDK compatibility. We should refactor all the places that use "CredentialType" as a method identifier (flow.Active fields, etc.)
 )
 
 func (c CredentialsType) String() string {
@@ -119,6 +120,8 @@ func (c CredentialsType) ToUiNodeGroup() node.UiNodeGroup {
 		return node.PasskeyGroup
 	case CredentialsTypeDeviceAuthn:
 		return node.DeviceAuthnGroup
+	case CredentialsTypeIdentifierFirst:
+		return node.IdentifierFirstGroup
 	default:
 		return node.DefaultGroup
 	}

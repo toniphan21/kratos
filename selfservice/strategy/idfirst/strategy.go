@@ -36,7 +36,7 @@ type Strategy struct{ d dependencies }
 func NewStrategy(d dependencies) *Strategy { return &Strategy{d: d} }
 
 func (s *Strategy) ID() identity.CredentialsType {
-	return identity.CredentialsType(node.IdentifierFirstGroup)
+	return identity.CredentialsTypeIdentifierFirst
 }
 
 func (s *Strategy) CompletedAuthenticationMethod(ctx context.Context) session.AuthenticationMethod {
