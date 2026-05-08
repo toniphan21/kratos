@@ -167,6 +167,9 @@ func CompareBcrypt(ctx context.Context, password, hash []byte) error {
 	if err := validateBcryptPasswordLength(password); err != nil {
 		return err
 	}
+	if err := validateBcryptHashCost(hash); err != nil {
+		return err
+	}
 
 	// ensure that the context is not canceled before doing the heavy lifting
 	if ctx.Err() != nil {
@@ -451,6 +454,9 @@ func decodeArgon2idHash(encodedHash string) (p *config.Argon2, salt, hash []byte
 	if err != nil {
 		return nil, nil, nil, err
 	}
+	if err := validateArgon2Params(uint64(p.Memory), p.Iterations, p.Parallelism); err != nil {
+		return nil, nil, nil, err
+	}
 
 	salt, err = base64.RawStdEncoding.Strict().DecodeString(parts[4])
 	if err != nil {
@@ -486,6 +492,9 @@ func decodePbkdf2Hash(encodedHash string) (p *Pbkdf2, salt, hash []byte, err err
 	if err != nil {
 		return nil, nil, nil, err
 	}
+	if err := validatePbkdf2Params(p.Iterations); err != nil {
+		return nil, nil, nil, err
+	}
 
 	salt, err = base64.RawStdEncoding.Strict().DecodeString(parts[3])
 	if err != nil {
@@ -514,6 +523,9 @@ func decodeScryptHash(encodedHash string) (p *Scrypt, salt, hash []byte, err err
 
 	_, err = fmt.Sscanf(parts[2], "ln=%d,r=%d,p=%d", &p.Cost, &p.Block, &p.Parrellization)
 	if err != nil {
+		return nil, nil, nil, err
+	}
+	if err := validateScryptParams(p.Cost, p.Block, p.Parrellization); err != nil {
 		return nil, nil, nil, err
 	}
 
@@ -659,6 +671,9 @@ func decodeFirebaseScryptHash(encodedHash string) (p *Scrypt, salt, saltSeparato
 
 	_, err = fmt.Sscanf(parts[2], "ln=%d,r=%d,p=%d", &p.Cost, &p.Block, &p.Parrellization)
 	if err != nil {
+		return nil, nil, nil, nil, nil, err
+	}
+	if err := validateFirebaseScryptParams(p.Cost, p.Block, p.Parrellization); err != nil {
 		return nil, nil, nil, nil, nil, err
 	}
 	// convert from firebase config "mem_cost" to

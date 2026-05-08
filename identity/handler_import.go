@@ -235,7 +235,17 @@ func (h *Handler) ImportPasswordCredentials(ctx context.Context, i *Identity, cr
 	}
 
 	if !(hash.IsValidHashFormat(hashed)) {
-		return errors.WithStack(herodot.ErrBadRequest().WithReasonf("The imported password does not match any known hash format. For more information see https://www.ory.sh/dr/2"))
+		return errors.WithStack(herodot.ErrBadRequest().WithReason("The imported password does not match any known hash format."))
+	}
+
+	if err := hash.ValidateImportedHash(hashed); err != nil {
+		if errors.Is(err, hash.ErrHashParametersOutOfBounds) {
+			return errors.WithStack(herodot.ErrBadRequest().WithWrap(err).WithReason(
+				"The imported password hash declares cost parameters that exceed the bounds enforced by Ory. " +
+					"Re-hash the password with a more conservative configuration before importing."))
+		}
+		return errors.WithStack(herodot.ErrBadRequest().WithWrap(err).WithReason(
+			"The imported password hash could not be parsed."))
 	}
 
 	return i.SetCredentialsWithConfig(CredentialsTypePassword, Credentials{}, CredentialsPassword{HashedPassword: string(hashed)})
