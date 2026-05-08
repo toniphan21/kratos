@@ -21,6 +21,7 @@ var _ MappedNullable = &DeviceAuthnKey{}
 
 // DeviceAuthnKey struct for DeviceAuthnKey
 type DeviceAuthnKey struct {
+	Attestation *DeviceAuthnAttestation `json:"attestation,omitempty"`
 	// ClientKeyID is a client-chosen id for the key and is unique per identity.
 	ClientKeyId *string `json:"client_key_id,omitempty"`
 	// CreatedAt is the timestamp of when the key was created. Only used for troubleshooting/UI.
@@ -53,6 +54,38 @@ func NewDeviceAuthnKey() *DeviceAuthnKey {
 func NewDeviceAuthnKeyWithDefaults() *DeviceAuthnKey {
 	this := DeviceAuthnKey{}
 	return &this
+}
+
+// GetAttestation returns the Attestation field value if set, zero value otherwise.
+func (o *DeviceAuthnKey) GetAttestation() DeviceAuthnAttestation {
+	if o == nil || IsNil(o.Attestation) {
+		var ret DeviceAuthnAttestation
+		return ret
+	}
+	return *o.Attestation
+}
+
+// GetAttestationOk returns a tuple with the Attestation field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *DeviceAuthnKey) GetAttestationOk() (*DeviceAuthnAttestation, bool) {
+	if o == nil || IsNil(o.Attestation) {
+		return nil, false
+	}
+	return o.Attestation, true
+}
+
+// HasAttestation returns a boolean if a field has been set.
+func (o *DeviceAuthnKey) HasAttestation() bool {
+	if o != nil && !IsNil(o.Attestation) {
+		return true
+	}
+
+	return false
+}
+
+// SetAttestation gets a reference to the given DeviceAuthnAttestation and assigns it to the Attestation field.
+func (o *DeviceAuthnKey) SetAttestation(v DeviceAuthnAttestation) {
+	o.Attestation = &v
 }
 
 // GetClientKeyId returns the ClientKeyId field value if set, zero value otherwise.
@@ -289,6 +322,9 @@ func (o DeviceAuthnKey) MarshalJSON() ([]byte, error) {
 
 func (o DeviceAuthnKey) ToMap() (map[string]interface{}, error) {
 	toSerialize := map[string]interface{}{}
+	if !IsNil(o.Attestation) {
+		toSerialize["attestation"] = o.Attestation
+	}
 	if !IsNil(o.ClientKeyId) {
 		toSerialize["client_key_id"] = o.ClientKeyId
 	}
@@ -332,6 +368,7 @@ func (o *DeviceAuthnKey) UnmarshalJSON(data []byte) (err error) {
 	additionalProperties := make(map[string]interface{})
 
 	if err = json.Unmarshal(data, &additionalProperties); err == nil {
+		delete(additionalProperties, "attestation")
 		delete(additionalProperties, "client_key_id")
 		delete(additionalProperties, "created_at")
 		delete(additionalProperties, "device_name")

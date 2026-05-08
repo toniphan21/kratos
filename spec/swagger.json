@@ -3754,6 +3754,9 @@
       "type": "object",
       "title": "Key represents an enrolled hardware security key used for device authentication (DeviceAuthn).",
       "properties": {
+        "attestation": {
+          "$ref": "#/definitions/deviceAuthnAttestation"
+        },
         "client_key_id": {
           "description": "ClientKeyID is a client-chosen id for the key and is unique per identity.",
           "type": "string"
@@ -3795,6 +3798,11 @@
       "description": "A Duration represents the elapsed time between two instants\nas an int64 nanosecond count. The representation limits the\nlargest representable duration to approximately 290 years.",
       "type": "integer",
       "format": "int64"
+    },
+    "Enumerated": {
+      "type": "integer",
+      "format": "int64",
+      "title": "An Enumerated is represented as a plain int."
     },
     "ID": {
       "type": "integer",
@@ -4555,6 +4563,259 @@
           "description": "The number of sessions that were revoked.",
           "type": "integer",
           "format": "int64"
+        }
+      }
+    },
+    "deviceAuthnAndroidAuthorizationList": {
+      "description": "Schema: https://source.android.com/docs/security/features/keystore/attestation#schema",
+      "type": "object",
+      "title": "AndroidAuthorizationList maps the ASN.1 tags to the fields defined in KeyMint 4.",
+      "properties": {
+        "active_date_time": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "algorithm": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "application_id": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint8"
+          }
+        },
+        "attestation_application_id": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint8"
+          }
+        },
+        "attestation_id_brand": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint8"
+          }
+        },
+        "attestation_id_device": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint8"
+          }
+        },
+        "attestation_id_imei": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint8"
+          }
+        },
+        "attestation_id_manufacturer": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint8"
+          }
+        },
+        "attestation_id_meid": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint8"
+          }
+        },
+        "attestation_id_model": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint8"
+          }
+        },
+        "attestation_id_product": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint8"
+          }
+        },
+        "attestation_id_serial": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint8"
+          }
+        },
+        "auth_timeout": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "boot_patch_level": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "creation_date_time": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "digest": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int64"
+          }
+        },
+        "ec_curve": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "key_size": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "origin": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "origination_expire_date_time": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "os_patch_level": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "os_version": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "purpose": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int64"
+          }
+        },
+        "root_of_trust": {
+          "$ref": "#/definitions/deviceAuthnAndroidRootOfTrust"
+        },
+        "usage_expire_date_time": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "user_auth_type": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "vendor_patch_level": {
+          "type": "integer",
+          "format": "int64"
+        }
+      }
+    },
+    "deviceAuthnAndroidKeyDescription": {
+      "description": "Schema: https://source.android.com/docs/security/features/keystore/attestation#schema",
+      "type": "object",
+      "title": "AndroidKeyDescription matches the ASN.1 sequence defined by Android.\nIt is stored in the leaf certificate's x509 extension.",
+      "properties": {
+        "attestation_security_level": {
+          "$ref": "#/definitions/Enumerated"
+        },
+        "attestation_version": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "keymaster_security_level": {
+          "$ref": "#/definitions/Enumerated"
+        },
+        "keymaster_version": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "software_enforced": {
+          "$ref": "#/definitions/deviceAuthnAndroidAuthorizationList"
+        },
+        "tee_enforced": {
+          "$ref": "#/definitions/deviceAuthnAndroidAuthorizationList"
+        }
+      }
+    },
+    "deviceAuthnAndroidRootOfTrust": {
+      "type": "object",
+      "properties": {
+        "device_locked": {
+          "type": "boolean"
+        },
+        "verified_boot_hash": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint8"
+          }
+        },
+        "verified_boot_key": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint8"
+          }
+        },
+        "verified_boot_state": {
+          "$ref": "#/definitions/Enumerated"
+        }
+      }
+    },
+    "deviceAuthnAttestation": {
+      "description": "Exactly one of Android / IOS is set, matching the key's DeviceType.",
+      "type": "object",
+      "title": "Attestation holds the platform-specific attestation parsed at enrollment.",
+      "properties": {
+        "android": {
+          "$ref": "#/definitions/deviceAuthnAndroidKeyDescription"
+        },
+        "ios": {
+          "$ref": "#/definitions/deviceAuthnIOSAttestation"
+        }
+      }
+    },
+    "deviceAuthnIOSAttStmt": {
+      "description": "Defined in https://developer.apple.com/documentation/devicecheck/validating-apps-that-connect-to-your-server#Verify-the-attestation .",
+      "type": "object",
+      "title": "IOSAttStmt is the attestation statement of an Apple App Attest attestation.",
+      "properties": {
+        "x5c": {
+          "description": "X5c is the leaf-first certificate chain encoded as base64(DER), per\nthe JOSE convention defined in RFC 7515 §4.1.6.",
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "uint8"
+            }
+          }
+        }
+      }
+    },
+    "deviceAuthnIOSAttestation": {
+      "description": "Defined in https://developer.apple.com/documentation/devicecheck/validating-apps-that-connect-to-your-server#Verify-the-attestation .",
+      "type": "object",
+      "title": "IOSAttestation is an Apple App Attest attestation.",
+      "properties": {
+        "att_stmt": {
+          "$ref": "#/definitions/deviceAuthnIOSAttStmt"
+        },
+        "auth_data": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint8"
+          }
+        },
+        "fmt": {
+          "type": "string"
         }
       }
     },

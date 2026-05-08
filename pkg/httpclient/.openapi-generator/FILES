@@ -32,6 +32,12 @@ docs/CreateRecoveryCodeForIdentityBody.md
 docs/CreateRecoveryLinkForIdentityBody.md
 docs/CreateTestLoginFlowBody.md
 docs/DeleteMySessionsCount.md
+docs/DeviceAuthnAndroidAuthorizationList.md
+docs/DeviceAuthnAndroidKeyDescription.md
+docs/DeviceAuthnAndroidRootOfTrust.md
+docs/DeviceAuthnAttestation.md
+docs/DeviceAuthnIOSAttStmt.md
+docs/DeviceAuthnIOSAttestation.md
 docs/DeviceAuthnKey.md
 docs/ErrorAuthenticatorAssuranceLevelNotSatisfied.md
 docs/ErrorBrowserLocationChangeRequired.md
@@ -190,6 +196,12 @@ model_create_recovery_code_for_identity_body.go
 model_create_recovery_link_for_identity_body.go
 model_create_test_login_flow_body.go
 model_delete_my_sessions_count.go
+model_device_authn_android_authorization_list.go
+model_device_authn_android_key_description.go
+model_device_authn_android_root_of_trust.go
+model_device_authn_attestation.go
+model_device_authn_ios_att_stmt.go
+model_device_authn_ios_attestation.go
 model_device_authn_key.go
 model_error_authenticator_assurance_level_not_satisfied.go
 model_error_browser_location_change_required.go

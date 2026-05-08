@@ -52,4 +52,9 @@ type Key struct {
 	// or it must be set to 'confirmed' with an admin API call.
 	// This is to support out-of-band KYC processes e.g. sending a physical letter with a code to the device owner.
 	State KeyState `json:"state"`
+
+	// Attestation holds the platform-specific attestation captured at
+	// enrollment. Useful for distinguishing keys in the UI (e.g. OS
+	// version, manufacturer) and for forensics.
+	Attestation *Attestation `json:"attestation,omitempty"`
 }
